@@ -1,36 +1,74 @@
 "use client";
 
-import { useState } from "react";
-import { Icon } from "@/components/icons";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/toast";
-import { Badge, Button, Card, Field, Input, Select, StaleNote } from "@/components/ui";
+import { Badge, Button, cx, Spinner, StaleNote } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { useMe } from "@/lib/client/me";
-import { fmtClock, WEEKDAYS } from "@/lib/time";
-import type { Window } from "./types";
+import { WEEKDAYS } from "@/lib/time";
+import { cellKey, cellsToWindows, hourLabel, HOURS, windowsToCells, type Window } from "./types";
 
-/** Members enter the weekly windows they can work; HR plans from these. */
+/**
+ * Members tap (or drag across) the hours they can usually work each week.
+ * Saving replaces their whole week; HR plans duties from these.
+ */
 export function MyAvailability() {
   const { user, isAdmin } = useMe();
-  const { data, stale, reload } = useApi<{ availability: Window[]; availabilityOpen: boolean }>(
-    "/api/availability",
-  );
-  const [form, setForm] = useState({ weekday: "0", start: "09:00", end: "11:00", note: "" });
+  const { data, stale, reload } = useApi<{ availability: Window[]; availabilityOpen: boolean }>("/api/availability");
+  const mine = (data?.availability ?? []).filter((w) => w.userId === user.id);
+  const savedKey = JSON.stringify(cellsToWindows(windowsToCells(mine)));
+
+  const [cells, setCells] = useState<Set<string> | null>(null);
   const [busy, setBusy] = useState(false);
+  // Fill the grid from the server once, then whenever a save lands.
+  const loadedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!data || loadedKey.current === savedKey) return;
+    loadedKey.current = savedKey;
+    setCells(windowsToCells(mine));
+  }, [data, savedKey, mine]);
 
   const open = data?.availabilityOpen ?? false;
   const canEdit = open || isAdmin;
-  const mine = (data?.availability ?? []).filter((w) => w.userId === user.id);
+  const dirty = cells !== null && JSON.stringify(cellsToWindows(cells)) !== savedKey;
 
-  async function add() {
+  // Dragging paints every cell the pointer passes over the same way as the first.
+  const paint = useRef<boolean | null>(null);
+  useEffect(() => {
+    const stop = () => (paint.current = null);
+    window.addEventListener("pointerup", stop);
+    return () => window.removeEventListener("pointerup", stop);
+  }, []);
+
+  function set(key: string, on: boolean) {
+    setCells((c) => {
+      const next = new Set(c);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }
+
+  function toggleDay(d: number) {
+    if (!canEdit || !cells) return;
+    const all = HOURS.every((h) => cells.has(cellKey(d, h)));
+    setCells((c) => {
+      const next = new Set(c);
+      for (const h of HOURS) {
+        if (all) next.delete(cellKey(d, h));
+        else next.add(cellKey(d, h));
+      }
+      return next;
+    });
+  }
+
+  async function save() {
+    if (!cells) return;
     setBusy(true);
     try {
-      await api("/api/availability", {
-        body: { weekday: Number(form.weekday), start: form.start, end: form.end, note: form.note || null },
-      });
-      toast("Added");
-      setForm((f) => ({ ...f, note: "" }));
-      reload();
+      await api("/api/availability", { method: "PUT", body: { windows: cellsToWindows(cells) } });
+      toast("Availability saved");
+      await reload();
     } catch (e) {
       toast((e as Error).message, "bad");
     } finally {
@@ -38,95 +76,100 @@ export function MyAvailability() {
     }
   }
 
-  async function remove(id: string) {
-    try {
-      await api(`/api/availability/${id}`, { method: "DELETE" });
-      reload();
-    } catch (e) {
-      toast((e as Error).message, "bad");
-    }
-  }
+  if (!data || !cells)
+    return (
+      <div className="grid place-items-center py-16">
+        <Spinner />
+      </div>
+    );
+
+  const hours = cells.size;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <StaleNote stale={stale} />
-      <Card className="flex flex-wrap items-center justify-between gap-2 p-4">
-        <div>
-          <div className="text-sm font-medium">Your weekly availability</div>
-          <div className="text-xs text-ink-soft">
-            Add every time window you can be at the counter. HR uses these to plan the duties.
-          </div>
+      <div className="flex flex-wrap items-center gap-3">
+        {open ? <Badge tone="good">HR is collecting times</Badge> : <Badge>Closed until HR asks for times</Badge>}
+        <span className="text-sm text-ink-soft">
+          You&apos;re free <b className="text-ink">{hours}</b> hour{hours === 1 ? "" : "s"} a week
+        </span>
+      </div>
+      <p className="text-sm text-ink-soft">
+        {canEdit
+          ? "Tap the hours you can usually work, or drag across several. Tap a day's name to fill or clear the whole day."
+          : "HR opens this when they're planning a new week. You can look, but changes are locked for now."}
+      </p>
+
+      <div className="rounded-2xl border border-line bg-surface p-2 sm:p-4">
+        <div className="grid select-none gap-1 sm:gap-1.5" style={{ gridTemplateColumns: "2.25rem repeat(7, minmax(0, 1fr))" }}>
+          <div />
+          {WEEKDAYS.map((d, i) => (
+            <button
+              key={d}
+              type="button"
+              disabled={!canEdit}
+              onClick={() => toggleDay(i)}
+              className="rounded-lg py-1.5 text-xs font-semibold text-ink-soft hover:bg-muted hover:text-ink disabled:hover:bg-transparent"
+            >
+              {d}
+            </button>
+          ))}
+          {HOURS.map((h) => (
+            <Row key={h}>
+              <div className="flex items-center justify-end pr-1 text-[10px] text-ink-faint tabular-nums sm:text-[11px]">{hourLabel(h)}</div>
+              {WEEKDAYS.map((_, d) => {
+                const k = cellKey(d, h);
+                const on = cells.has(k);
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    disabled={!canEdit}
+                    aria-pressed={on}
+                    aria-label={`${WEEKDAYS[d]} ${hourLabel(h)}`}
+                    onPointerDown={(e) => {
+                      if (!canEdit) return;
+                      e.preventDefault();
+                      paint.current = !on;
+                      set(k, !on);
+                    }}
+                    onPointerEnter={() => paint.current !== null && set(k, paint.current)}
+                    onKeyDown={(e) => (e.key === " " || e.key === "Enter") && (e.preventDefault(), set(k, !on))}
+                    className={cx(
+                      "grid h-9 place-items-center rounded-lg text-xs font-medium transition sm:h-10",
+                      on ? "bg-primary text-primary-foreground" : "bg-muted text-transparent",
+                      canEdit && !on && "hover:bg-primary-soft",
+                    )}
+                  >
+                    ✓
+                  </button>
+                );
+              })}
+            </Row>
+          ))}
         </div>
-        {open ? <Badge tone="good">Collection open</Badge> : <Badge>Closed until HR opens it</Badge>}
-      </Card>
+      </div>
 
       {canEdit && (
-        <Card className="p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_1fr_2fr_auto] sm:items-end">
-            <Field label="Day">
-              <Select value={form.weekday} onChange={(e) => setForm({ ...form, weekday: e.target.value })}>
-                {WEEKDAYS.map((d, i) => (
-                  <option key={d} value={i}>
-                    {d}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="From">
-              <Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
-            </Field>
-            <Field label="To">
-              <Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} />
-            </Field>
-            <Field label="Note">
-              <Input
-                placeholder="Optional, e.g. only after lab"
-                value={form.note}
-                onChange={(e) => setForm({ ...form, note: e.target.value })}
-              />
-            </Field>
-            <Button variant="primary" className="col-span-2 sm:col-span-1" disabled={busy} onClick={add}>
-              <Icon name="plus" /> Add
-            </Button>
-          </div>
-        </Card>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {dirty && <span className="text-sm text-ink-soft">You have unsaved changes</span>}
+          <Button
+            variant="ghost"
+            disabled={!dirty || busy}
+            onClick={() => setCells(windowsToCells(mine))}
+          >
+            Undo changes
+          </Button>
+          <Button variant="primary" size="lg" disabled={!dirty || busy} onClick={save}>
+            {busy ? "Saving…" : "Save my availability"}
+          </Button>
+        </div>
       )}
-
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        {WEEKDAYS.map((d, i) => {
-          const list = mine.filter((w) => w.weekday === i);
-          return (
-            <Card key={d} className="p-3">
-              <div className="mb-2 text-xs font-semibold text-ink-soft">{d}</div>
-              {list.length === 0 ? (
-                <div className="text-xs text-ink-faint">Not available</div>
-              ) : (
-                <ul className="space-y-1.5">
-                  {list.map((w) => (
-                    <li key={w.id} className="flex items-start justify-between gap-2 rounded-md bg-muted px-2 py-1.5">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium tabular-nums">
-                          {fmtClock(w.start)} – {fmtClock(w.end)}
-                        </div>
-                        {w.note && <div className="truncate text-xs text-ink-soft">{w.note}</div>}
-                      </div>
-                      {canEdit && (
-                        <button
-                          aria-label="Remove"
-                          onClick={() => remove(w.id)}
-                          className="rounded p-1 text-ink-faint hover:bg-surface hover:text-destructive"
-                        >
-                          <Icon name="x" className="size-3.5" />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          );
-        })}
-      </div>
     </div>
   );
+}
+
+// A grid row is just its cells; this keeps the JSX readable.
+function Row({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

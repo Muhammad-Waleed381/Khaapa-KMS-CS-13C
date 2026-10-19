@@ -218,7 +218,13 @@ export async function stats(db: DB, range: Range) {
   const [sum, value] = await Promise.all([summary(db, from, to), stockValue(db)]);
 
   const revenueByDay = await db
-    .select({ day: pkDay(t.sales.createdAt), revenue: sql<number>`sum(${t.sales.total})::int` })
+    .select({
+      day: pkDay(t.sales.createdAt),
+      revenue: sql<number>`sum(${t.sales.total})::int`,
+      cash: sql<number>`coalesce(sum(${t.sales.total}) filter (where ${t.sales.method} = 'cash'), 0)::int`,
+      online: sql<number>`coalesce(sum(${t.sales.total}) filter (where ${t.sales.method} = 'online'), 0)::int`,
+      count: sql<number>`count(*)::int`,
+    })
     .from(t.sales)
     .where(saleWhere)
     .groupBy(sql`1`);
@@ -236,6 +242,7 @@ export async function stats(db: DB, range: Range) {
     .groupBy(sql`1`);
 
   const rev = new Map(revenueByDay.map((r) => [r.day, r.revenue]));
+  const byDay = new Map(revenueByDay.map((r) => [r.day, r]));
   const cost = new Map(costByDay.map((r) => [r.day, r.cost]));
   let days = fixedDays;
   if (!days.length) {
@@ -253,7 +260,8 @@ export async function stats(db: DB, range: Range) {
   }
   const daily = days.map((day) => {
     const r = rev.get(day) ?? 0;
-    return { day, revenue: r, profit: r - (cost.get(day) ?? 0) };
+    const d = byDay.get(day);
+    return { day, revenue: r, profit: r - (cost.get(day) ?? 0), cash: d?.cash ?? 0, online: d?.online ?? 0, count: d?.count ?? 0 };
   });
 
   const hourRows = await db
@@ -311,7 +319,41 @@ export async function stats(db: DB, range: Range) {
     .filter((i) => i.stock <= i.lowStockAt)
     .sort((a, b) => a.stock - b.stock);
 
-  return { range, summary: sum, stockValue: value, daily, hourly, topItems, byCashier, lowStock };
+  const accounts = await onlineByAccount(db, from ?? new Date(0), to ?? new Date("2100-01-01T00:00:00Z"));
+
+  return { range, summary: sum, stockValue: value, daily, hourly, topItems, byCashier, lowStock, accounts };
+}
+
+/** Sales, profit, cash and online per PKT day for the last `n` days (today last), for sparklines. */
+export async function recentDays(db: DB, n = 7) {
+  const today = pkDate();
+  const first = addDays(today, -(n - 1));
+  const from = pkDayRange(first).start;
+  const to = pkDayRange(today).end;
+  const sales = await db
+    .select({
+      day: pkDay(t.sales.createdAt),
+      revenue: sql<number>`sum(${t.sales.total})::int`,
+      cash: sql<number>`coalesce(sum(${t.sales.total}) filter (where ${t.sales.method} = 'cash'), 0)::int`,
+      online: sql<number>`coalesce(sum(${t.sales.total}) filter (where ${t.sales.method} = 'online'), 0)::int`,
+    })
+    .from(t.sales)
+    .where(and(eq(t.sales.voided, false), gte(t.sales.createdAt, from), lt(t.sales.createdAt, to)))
+    .groupBy(sql`1`);
+  const costs = await db
+    .select({ day: pkDay(t.stockMoves.createdAt), cost: sql<number>`sum(${t.stockMoves.cost})::int` })
+    .from(t.stockMoves)
+    .where(
+      and(inArray(t.stockMoves.kind, ["sale", "settle", "void"]), gte(t.stockMoves.createdAt, from), lt(t.stockMoves.createdAt, to)),
+    )
+    .groupBy(sql`1`);
+  const s = new Map(sales.map((r) => [r.day, r]));
+  const c = new Map(costs.map((r) => [r.day, r.cost]));
+  return Array.from({ length: n }, (_, i) => {
+    const day = addDays(first, i);
+    const r = s.get(day);
+    return { day, revenue: r?.revenue ?? 0, cash: r?.cash ?? 0, online: r?.online ?? 0, profit: (r?.revenue ?? 0) - (c.get(day) ?? 0) };
+  });
 }
 
 export async function dayReport(db: DB, date: string) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
+import { Explainer } from "@/components/kit";
 import { toast } from "@/components/toast";
 import { Button, Card, cx, Field, Input, Modal, PageHeader, Select, Spinner, StaleNote } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
@@ -11,7 +12,7 @@ import { MyAvailability } from "./availability";
 import { MyDuties } from "./duties";
 import { AllAvailability } from "./overview";
 import { PlanWeek } from "./plan";
-import { weekDates, type Person, type Slot } from "./types";
+import { initials, timeRangeShort, weekDates, type Person, type Slot } from "./types";
 
 type Tab = "duties" | "mine" | "timetable" | "everyone" | "plan";
 
@@ -22,19 +23,19 @@ const TABS: Record<Tab, { label: string; intro: string }> = {
   },
   mine: {
     label: "My availability",
-    intro: "Tell HR when you're usually free each week. HR uses this to plan duties.",
+    intro: "Tell HR when you're usually free each week. HR plans everyone's duties from this.",
   },
   timetable: {
     label: "Timetable",
     intro: "Who is on counter duty and when. Counter shifts end automatically at the end of a duty slot. Click a slot to change it.",
   },
   everyone: {
-    label: "Availability",
+    label: "Who's free",
     intro: "When each person said they're free. Ask everyone for times before planning a new week.",
   },
   plan: {
     label: "Plan week",
-    intro: "Assign who works the counter when for the whole week, then Save all. People's availability is shown so you can pick someone who's free.",
+    intro: "Pick who works the counter when, for the whole week, then press Save all. People who said they're free are shown first.",
   },
 };
 
@@ -63,21 +64,21 @@ export default function SchedulePage() {
     <div>
       <PageHeader title="Schedule" sub="Counter duty. Times are Pakistan time." />
 
-      <div className="mb-3 flex gap-1 overflow-x-auto border-b border-line">
+      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:inline-flex">
         {tabs.map((id) => (
           <button
             key={id}
             onClick={() => setTab(id)}
             className={cx(
-              "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition",
-              tab === id ? "border-primary text-primary" : "border-transparent text-ink-soft hover:text-ink",
+              "min-h-10 flex-1 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition",
+              tab === id ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink",
             )}
           >
             {TABS[id].label}
           </button>
         ))}
       </div>
-      <p className="mb-4 max-w-2xl text-sm text-ink-soft">{TABS[tab].intro}</p>
+      <Explainer className="mb-6">{TABS[tab].intro}</Explainer>
 
       {tab === "mine" ? (
         <MyAvailability />
@@ -107,19 +108,26 @@ export default function SchedulePage() {
 function WeekNav({ week, today, onChange }: { week: string; today: string; onChange: (w: string) => void }) {
   const thisWeek = weekStart(today);
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <Button size="sm" aria-label="Previous week" onClick={() => onChange(addDays(week, -7))}>
-        ‹
-      </Button>
-      <Button size="sm" disabled={week === thisWeek} onClick={() => onChange(thisWeek)}>
-        This week
-      </Button>
-      <Button size="sm" aria-label="Next week" onClick={() => onChange(addDays(week, 7))}>
-        ›
-      </Button>
-      <div className="ml-1 text-sm font-medium">
-        {fmtDate(week)} – {fmtDate(addDays(week, 6))}
+    <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-1">
+        <Button aria-label="Previous week" onClick={() => onChange(addDays(week, -7))}>
+          ‹
+        </Button>
+        <Button aria-label="Next week" onClick={() => onChange(addDays(week, 7))}>
+          ›
+        </Button>
       </div>
+      <div className="text-base font-semibold">
+        {week === thisWeek ? "This week" : week === addDays(thisWeek, 7) ? "Next week" : `Week of ${fmtDate(week)}`}
+        <span className="ml-2 text-sm font-normal text-ink-soft">
+          {fmtDate(week)} – {fmtDate(addDays(week, 6))}
+        </span>
+      </div>
+      {week !== thisWeek && (
+        <Button size="sm" variant="ghost" onClick={() => onChange(thisWeek)}>
+          Back to this week
+        </Button>
+      )}
     </div>
   );
 }
@@ -158,10 +166,10 @@ function WeekView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="grid gap-3 md:grid-cols-2">
-        <Card className="p-4">
-          <div className="text-xs font-medium text-ink-soft">On the counter now</div>
+        <Card className="border border-line p-4">
+          <div className="text-sm font-medium text-ink-soft">On the counter now</div>
           {onCounter.length === 0 ? (
             <div className="mt-1 text-sm text-ink-faint">Nobody has started a shift.</div>
           ) : (
@@ -176,9 +184,9 @@ function WeekView({
             </div>
           )}
         </Card>
-        <Card className="p-4">
+        <Card className="border border-line p-4">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-medium text-ink-soft">My slots this week</div>
+            <div className="text-sm font-medium text-ink-soft">My duties this week</div>
             {isAdmin && (
               <Button size="sm" variant="ghost" disabled={copying} onClick={copyPrevious}>
                 <Icon name="copy" /> Copy last week
@@ -208,7 +216,7 @@ function WeekView({
           <div
             key={date}
             className={cx(
-              "min-h-40 rounded-xl border p-2",
+              "min-h-48 rounded-2xl border p-2",
               date === today ? "border-primary bg-primary-soft/40" : "border-line bg-surface",
             )}
           >
@@ -233,7 +241,7 @@ function WeekView({
         {dates.map((date) => {
           const list = slots.filter((s) => s.date === date);
           return (
-            <Card key={date} className={cx("p-3", date === today && "border-primary")}>
+            <Card key={date} className={cx("border border-line p-4", date === today && "border-primary bg-primary-soft/30")}>
               <div className={cx("mb-2 text-sm font-semibold", date === today && "text-primary")}>
                 {fmtDate(date)}
                 {date === today && " · Today"}
@@ -273,19 +281,26 @@ function SlotCard({ slot, mine, onClick }: { slot: Slot; mine: boolean; onClick?
       onClick={onClick}
       disabled={!onClick}
       className={cx(
-        "block w-full rounded-lg border px-2 py-1.5 text-left transition disabled:cursor-default",
-        mine ? "border-primary/40 bg-primary-soft" : "border-line bg-muted/60",
-        onClick && "hover:border-primary",
+        "block w-full rounded-xl border p-2 text-left transition disabled:cursor-default",
+        mine ? "border-primary/40 bg-primary-soft" : "border-line bg-surface",
+        onClick && "hover:border-primary hover:shadow-sm",
       )}
     >
-      <div className={cx("truncate text-sm font-medium", mine && "text-primary")}>
-        {slot.name}
-        {mine && " (you)"}
+      <div className="text-xs font-semibold whitespace-nowrap tabular-nums text-ink">{timeRangeShort(slot.start, slot.end)}</div>
+      <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+        <span
+          className={cx(
+            "grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-bold",
+            mine ? "bg-primary text-primary-foreground" : "bg-muted text-ink-soft",
+          )}
+        >
+          {initials(slot.name)}
+        </span>
+        <span className={cx("truncate text-sm", mine ? "font-semibold text-primary" : "text-ink")}>
+          {mine ? "You" : slot.name.split(" ")[0]}
+        </span>
       </div>
-      <div className="text-xs tabular-nums text-ink-soft">
-        {fmtClock(slot.start)} – {fmtClock(slot.end)}
-      </div>
-      {slot.note && <div className="truncate text-xs text-ink-faint">{slot.note}</div>}
+      {slot.note && <div className="mt-1 truncate text-xs text-ink-faint">{slot.note}</div>}
     </button>
   );
 }

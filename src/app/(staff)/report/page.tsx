@@ -1,12 +1,15 @@
 "use client";
 
+import { Banknote, Check, ChevronLeft, ChevronRight, Copy, Share2, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Icon } from "@/components/icons";
+import { BarList, SplitBar } from "@/components/charts";
+import { Disclosure, EmptyState, KpiRow, KpiTile, Section } from "@/components/kit";
 import { toast } from "@/components/toast";
-import { Button, Card, Empty, Input, PageHeader, StaleNote, Stat } from "@/components/ui";
+import { Button, Card, cx, Input, PageHeader, StaleNote } from "@/components/ui";
 import { useApi } from "@/lib/client/api";
 import { rs } from "@/lib/money";
-import { addDays, fmtDate, pkDate, pkTime } from "@/lib/time";
+import { addDays, fmtClock, fmtDate, pkDate, pkTime } from "@/lib/time";
+import { Avatar, rsWhole } from "../stats/bits";
 
 type Report = {
   date: string;
@@ -32,13 +35,12 @@ function toText(r: Report) {
     `*Khaapa day report — ${fmtDate(r.date)}*`,
     "",
     `Sales: ${rs(r.totals.total)} (${r.totals.count} sales${r.totals.voids ? `, ${r.totals.voids} voided` : ""})`,
-    `Cash: ${rs(r.totals.cash)}`,
+    `Cash in the drawer: ${rs(r.expectedCash)}`,
     `Online: ${rs(r.totals.online)}`,
     ...(r.onlineByAccount.length > 1 || r.onlineByAccount.some((a) => a.accountId)
       ? r.onlineByAccount.map((a) => `  ${accountName(a)}: ${rs(a.total)}`)
       : []),
-    `Cash expected in hand: ${rs(r.expectedCash)}`,
-    `Gross profit: ${rs(r.totals.grossProfit)} (cost ${rs(r.totals.cogs)})`,
+    `Profit: ${rs(r.totals.grossProfit)} (stock cost ${rs(r.totals.cogs)})`,
   ];
   if (r.itemsSold.length) {
     out.push("", "*Items sold*");
@@ -69,9 +71,19 @@ function toText(r: Report) {
 
 export default function ReportPage() {
   const [date, setDate] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [allItems, setAllItems] = useState(false);
+  // Before the shop opens, the day to close is yesterday.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setDate(pkDate()), []);
+  useEffect(() => setDate(Number(pkTime().slice(0, 2)) < 8 ? addDays(pkDate(), -1) : pkDate()), []);
   const { data: r, error, stale } = useApi<Report>(date ? `/api/report?date=${date}` : null);
+  const today = date ? pkDate() : "";
+
+  function pick(d: string) {
+    setDate(d);
+    setChecked({});
+    setAllItems(false);
+  }
 
   async function share() {
     if (!r) return;
@@ -79,12 +91,14 @@ export default function ReportPage() {
     if (navigator.share) {
       try {
         await navigator.share({ text });
+        setChecked((c) => ({ ...c, share: true }));
         return;
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
       }
     }
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    setChecked((c) => ({ ...c, share: true }));
   }
 
   async function copy() {
@@ -97,139 +111,244 @@ export default function ReportPage() {
     }
   }
 
-  return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader
-        title="Day report"
-        sub="The closing summary of one day, for the team only."
-        actions={
-          <>
-            <div className="flex items-center gap-1">
-              <Button size="sm" onClick={() => date && setDate(addDays(date, -1))} aria-label="Previous day">
-                ‹
-              </Button>
-              <Input
-                type="date"
-                className="w-40"
-                value={date ?? ""}
-                max={pkDate()}
-                onChange={(e) => e.target.value && setDate(e.target.value)}
-              />
-              <Button
-                size="sm"
-                disabled={date === pkDate()}
-                onClick={() => date && setDate(addDays(date, 1))}
-                aria-label="Next day"
-              >
-                ›
-              </Button>
-            </div>
-            <Button onClick={copy} disabled={!r}>
-              <Icon name="copy" /> Copy
-            </Button>
-            <Button variant="primary" onClick={share} disabled={!r}>
-              <Icon name="share" /> Share
-            </Button>
-          </>
-        }
-      />
-      <StaleNote stale={stale} />
-      {error && !r && <Empty>{error}</Empty>}
+  const problems = r ? r.totals.voids + r.oversold.length + r.writeOffs.length : 0;
 
-      <p className="mb-4 rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
-        At closing time, count the cash drawer and check it matches <b className="text-foreground">Cash in hand (expected)</b>,
-        and check each online account received what is listed below. Then press Share to send this report to the team&apos;s
-        WhatsApp group. It also lists what sold, what was restocked or thrown away, and who worked the counter.
-      </p>
+  return (
+    <div className="mx-auto max-w-3xl space-y-10 pb-10">
+      <div>
+        <PageHeader title="Day report" sub="Close the day: check the money, then share the report with the team." />
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => date && pick(addDays(date, -1))} aria-label="Previous day">
+            <ChevronLeft className="size-4" />
+          </Button>
+          <Input
+            type="date"
+            aria-label="Day"
+            className="w-44"
+            value={date ?? ""}
+            max={today}
+            onChange={(e) => e.target.value && pick(e.target.value)}
+          />
+          <Button size="sm" disabled={date === today} onClick={() => date && pick(addDays(date, 1))} aria-label="Next day">
+            <ChevronRight className="size-4" />
+          </Button>
+          {date && date !== today && (
+            <Button size="sm" variant="ghost" onClick={() => pick(today)}>
+              Today
+            </Button>
+          )}
+        </div>
+        <div className="mt-4">
+          <StaleNote stale={stale} />
+        </div>
+        {error && !r && <EmptyState title="Couldn't load the report" description={error} />}
+      </div>
 
       {r && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Sales" value={rs(r.totals.total)} sub={`${r.totals.count} sales${r.totals.voids ? ` · ${r.totals.voids} voided` : ""}`} />
-            <Stat label="Cash in hand (expected)" value={rs(r.expectedCash)} />
-            <Stat label="Online" value={rs(r.totals.online)} />
-            <Stat label="Gross profit" value={rs(r.totals.grossProfit)} sub={`Cost ${rs(r.totals.cogs)}`} />
+        <>
+          {/* The one number that matters at closing time */}
+          <div className="rounded-3xl border border-primary/20 bg-primary-soft/60 p-6 sm:p-8">
+            <div className="flex items-center gap-2 text-sm font-medium text-ink-soft">
+              <Banknote className="size-4" /> Money that should be in the drawer
+            </div>
+            <div className="mt-2 text-4xl font-semibold tracking-tight tabular-nums text-ink sm:text-5xl">{rs(r.expectedCash)}</div>
+            <p className="mt-2 text-sm text-ink-soft">
+              All cash sales on {fmtDate(r.date)}. Count the drawer — it should match this.
+            </p>
           </div>
 
-          {r.onlineByAccount.length > 0 && (
-            <Section title={`Online money by account · ${rs(r.totals.online)}`} show>
-              <Rows rows={r.onlineByAccount.map((a) => [`${accountName(a)} · ${a.count} sales`, rs(a.total)])} />
+          {/* Closing checklist */}
+          <Section title="Closing checklist" description="Tick each step as you go.">
+            <ol className="space-y-3">
+              <CheckStep
+                n={1}
+                done={!!checked.cash}
+                onToggle={() => setChecked((c) => ({ ...c, cash: !c.cash }))}
+                title={`Count the drawer: ${rs(r.expectedCash)}`}
+                description="If it doesn't match, check Sales for voids or a sale rung up as cash by mistake."
+              />
+              <CheckStep
+                n={2}
+                done={!!checked.online}
+                onToggle={() => setChecked((c) => ({ ...c, online: !c.online }))}
+                title={`Check online payments: ${rs(r.totals.online)}`}
+                description={
+                  r.onlineByAccount.length
+                    ? "Open each account's app and check it received the amount below."
+                    : "No online payments today."
+                }
+              >
+                {r.onlineByAccount.length > 0 && (
+                  <div className="mt-4">
+                    <SplitBar
+                      parts={r.onlineByAccount.map((a, i) => ({
+                        label: accountName(a),
+                        value: a.total,
+                        color: a.accountId && i < 3 ? undefined : "var(--series-muted)",
+                      }))}
+                      format={rs}
+                    />
+                  </div>
+                )}
+              </CheckStep>
+              <CheckStep
+                n={3}
+                done={!!checked.share}
+                onToggle={() => setChecked((c) => ({ ...c, share: !c.share }))}
+                title="Share the report with the team"
+                description="Sends a short summary to WhatsApp."
+              >
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="primary" size="lg" onClick={share}>
+                    <Share2 className="size-4" /> Share report
+                  </Button>
+                  <Button size="lg" onClick={copy}>
+                    <Copy className="size-4" /> Copy text
+                  </Button>
+                </div>
+              </CheckStep>
+            </ol>
+          </Section>
+
+          <Section title="The day in numbers">
+            <KpiRow>
+              <KpiTile label="Sales" value={rs(r.totals.total)} hint={`${r.totals.count} sales`} />
+              <KpiTile label="Profit" value={rsWhole(r.totals.grossProfit)} hint="Sales minus what the stock cost" />
+              <KpiTile label="Cash" value={rs(r.totals.cash)} />
+              <KpiTile label="Online" value={rs(r.totals.online)} />
+            </KpiRow>
+          </Section>
+
+          <Section title="What sold" description={r.itemsSold.length ? "By number sold." : undefined}>
+            {r.itemsSold.length ? (
+              <Card className="space-y-4 border border-line p-5">
+                <BarList
+                  rows={r.itemsSold.map((i) => ({ label: i.name, value: i.qty, hint: `${rs(i.revenue)} · ${rs(i.profit)} profit` }))}
+                  format={(v) => `${v} sold`}
+                  max={allItems ? undefined : 7}
+                />
+                {r.itemsSold.length > 7 && (
+                  <Button size="sm" variant="ghost" onClick={() => setAllItems(!allItems)}>
+                    {allItems ? "Show fewer" : `Show all ${r.itemsSold.length} items`}
+                  </Button>
+                )}
+              </Card>
+            ) : (
+              <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm text-ink-soft">Nothing was sold on this day.</p>
+            )}
+          </Section>
+
+          {problems > 0 && (
+            <Section title="Things to look at" description="Not necessarily wrong, but worth a glance.">
+              <div className="space-y-3">
+                {r.totals.voids > 0 && (
+                  <Problem title={`${r.totals.voids} ${r.totals.voids === 1 ? "sale was" : "sales were"} voided`} description="See who and why on the Sales page." />
+                )}
+                {r.oversold.length > 0 && (
+                  <Problem
+                    title={`${r.oversold.reduce((s, o) => s + o.qty, 0)} sold while the shelf showed none`}
+                    description={r.oversold.map((o) => `${o.qty}× ${o.name}`).join(", ") + ". Check the stock count for these."}
+                  />
+                )}
+                {r.writeOffs.length > 0 && (
+                  <Problem
+                    title={`${rs(r.writeOffTotal)} of stock thrown away or missing`}
+                    description={r.writeOffs.map((w) => `${w.qty}× ${w.name}${w.note ? ` (${w.note})` : ""}`).join(", ")}
+                  />
+                )}
+              </div>
             </Section>
           )}
 
-          <Section title="Items sold" empty="Nothing sold." show={r.itemsSold.length > 0}>
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-ink-faint">
-                <tr>
-                  <th className="pb-2 font-medium">Item</th>
-                  <th className="pb-2 text-right font-medium">Qty</th>
-                  <th className="pb-2 text-right font-medium">Revenue</th>
-                  <th className="hidden pb-2 text-right font-medium sm:table-cell">Cost</th>
-                  <th className="pb-2 text-right font-medium">Profit</th>
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {r.itemsSold.map((i) => (
-                  <tr key={i.itemId} className="border-t border-line">
-                    <td className="py-1.5">{i.name}</td>
-                    <td className="py-1.5 text-right">{i.qty}</td>
-                    <td className="py-1.5 text-right">{rs(i.revenue)}</td>
-                    <td className="hidden py-1.5 text-right sm:table-cell">{rs(i.cost)}</td>
-                    <td className="py-1.5 text-right">{rs(i.profit)}</td>
-                  </tr>
+          <Section title="Who worked">
+            {r.shifts.length ? (
+              <div className="flex flex-wrap gap-3">
+                {r.shifts.map((s, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+                    <Avatar name={s.name} />
+                    <div>
+                      <div className="text-sm font-medium text-ink">{s.name}</div>
+                      <div className="text-xs text-ink-soft tabular-nums">
+                        {fmtClock(pkTime(s.startedAt))} – {s.endedAt ? fmtClock(pkTime(s.endedAt)) : "still on"}
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm text-ink-soft">Nobody started a shift on this day.</p>
+            )}
           </Section>
 
-          {r.oversold.length > 0 && (
-            <Section title="Sold while out of stock" show>
-              <p className="mb-2 text-xs text-ink-faint">Their cost is counted when the next restock arrives.</p>
-              <Rows rows={r.oversold.map((o) => [`${o.qty}× ${o.name}`, pkTime(o.at)])} />
-            </Section>
+          {(r.restocks.length > 0 || r.preorders.length > 0) && (
+            <div className="space-y-3">
+              {r.restocks.length > 0 && (
+                <Disclosure summary={`Restocked: ${r.restocks.length} ${r.restocks.length === 1 ? "item" : "items"} for ${rs(r.restockTotal)}`}>
+                  <Rows rows={r.restocks.map((x) => [`${x.qty}× ${x.name}${x.supplier ? ` from ${x.supplier}` : ""}`, rs(x.cost)])} />
+                </Disclosure>
+              )}
+              {r.preorders.length > 0 && (
+                <Disclosure summary={`Pre-orders collected: ${r.preorders.length}`}>
+                  <Rows rows={r.preorders.map((p) => [`${p.code} · ${p.customerName}`, rs(p.total)])} />
+                </Disclosure>
+              )}
+            </div>
           )}
-
-          <Section title={`Restocked · ${rs(r.restockTotal)}`} empty="No restocks." show={r.restocks.length > 0}>
-            <Rows
-              rows={r.restocks.map((x) => [
-                `${x.qty}× ${x.name}${x.supplier ? ` from ${x.supplier}` : ""}${x.by ? ` · ${x.by}` : ""}`,
-                rs(x.cost),
-              ])}
-            />
-          </Section>
-
-          <Section title={`Written off · ${rs(r.writeOffTotal)}`} empty="Nothing written off." show={r.writeOffs.length > 0}>
-            <Rows
-              rows={r.writeOffs.map((w) => [
-                `${w.qty}× ${w.name}${w.kind === "correction" ? " (count correction)" : ""}${w.note ? ` — ${w.note}` : ""}`,
-                rs(w.cost),
-              ])}
-            />
-          </Section>
-
-          {r.preorders.length > 0 && (
-            <Section title="Pre-orders collected" show>
-              <Rows rows={r.preorders.map((p) => [`${p.code} · ${p.customerName}`, rs(p.total)])} />
-            </Section>
-          )}
-
-          <Section title="On the counter" empty="No shifts." show={r.shifts.length > 0}>
-            <Rows
-              rows={r.shifts.map((s) => [s.name, `${pkTime(s.startedAt)}–${s.endedAt ? pkTime(s.endedAt) : "still on"}`])}
-            />
-          </Section>
-        </div>
+        </>
       )}
     </div>
   );
 }
 
-function Section({ title, empty, show, children }: { title: string; empty?: string; show: boolean; children: ReactNode }) {
+function CheckStep({
+  n,
+  done,
+  onToggle,
+  title,
+  description,
+  children,
+}: {
+  n: number;
+  done: boolean;
+  onToggle: () => void;
+  title: ReactNode;
+  description?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
-    <Card className="p-4">
-      <h2 className="mb-2 text-sm font-semibold">{title}</h2>
-      {show ? children : <p className="text-sm text-ink-faint">{empty}</p>}
-    </Card>
+    <li className={cx("rounded-2xl border bg-surface p-4 transition sm:p-5", done ? "border-primary/40" : "border-line")}>
+      <div className="flex gap-4">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-pressed={done}
+          aria-label={done ? `Step ${n} done` : `Mark step ${n} done`}
+          className={cx(
+            "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold transition",
+            done ? "bg-primary text-primary-foreground" : "bg-muted text-ink-soft hover:bg-primary-soft hover:text-primary",
+          )}
+        >
+          {done ? <Check className="size-4" /> : n}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className={cx("font-medium text-ink", done && "text-ink-soft")}>{title}</div>
+          {description && <p className="mt-0.5 text-sm text-ink-soft">{description}</p>}
+          {children}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function Problem({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex gap-3 rounded-2xl border border-warn/30 bg-warn/8 p-4">
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
+      <div>
+        <div className="text-sm font-medium text-ink">{title}</div>
+        <p className="mt-0.5 text-sm text-ink-soft">{description}</p>
+      </div>
+    </div>
   );
 }
 
@@ -237,11 +356,12 @@ function Rows({ rows }: { rows: [string, string][] }) {
   return (
     <ul className="divide-y divide-line text-sm">
       {rows.map(([a, b], i) => (
-        <li key={i} className="flex justify-between gap-4 py-1.5">
-          <span>{a}</span>
+        <li key={i} className="flex justify-between gap-4 py-2">
+          <span className="text-ink">{a}</span>
           <span className="shrink-0 tabular-nums text-ink-soft">{b}</span>
         </li>
       ))}
     </ul>
   );
 }
+

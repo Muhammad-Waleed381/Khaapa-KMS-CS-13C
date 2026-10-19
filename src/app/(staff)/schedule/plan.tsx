@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
-import { Badge, Button, Card, Input, Select } from "@/components/ui";
+import { Button, Card, Input, Select } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { addDays, fmtClock, fmtDate, weekday } from "@/lib/time";
 import { weekDates, type Person, type Slot, type Window } from "./types";
@@ -47,53 +47,34 @@ export function PlanWeek({ week, slots, onSaved }: { week: string; slots: Slot[]
     }
   }
 
-  async function toggleCollection() {
-    try {
-      await api("/api/schedule/settings", { body: { availabilityOpen: !avail.data?.availabilityOpen } });
-      avail.reload();
-    } catch (e) {
-      toast((e as Error).message, "bad");
-    }
-  }
-
   const respondents = new Set(windows.map((w) => w.userId));
   const missing = users.filter((u) => !respondents.has(u.id));
 
   return (
-    <div className="space-y-4">
-      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            Availability collection
-            {avail.data?.availabilityOpen ? <Badge tone="good">Open</Badge> : <Badge>Closed</Badge>}
-          </div>
-          <div className="mt-0.5 text-xs text-ink-soft">
-            {respondents.size} of {users.length} people have entered their times.
-            {missing.length > 0 && ` Not yet: ${missing.map((m) => m.name).join(", ")}.`}
-          </div>
-        </div>
-        <Button onClick={toggleCollection}>
-          {avail.data?.availabilityOpen ? "Close collection" : "Open collection"}
-        </Button>
-      </Card>
+    <div className="space-y-5">
+      <p className="text-sm text-ink-soft">
+        {respondents.size} of {users.length} people have told you when they&apos;re free
+        {missing.length > 0 && <> · not yet: {missing.map((m) => m.name).join(", ")}</>}. Tap a free person to add
+        their time, or use Quick assign.
+      </p>
 
       {weekDrafts.length > 0 && (
-        <div className="sticky top-14 z-30 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary-soft p-3 md:top-2">
-          <div className="text-sm font-medium text-primary">
-            {weekDrafts.length} new slot{weekDrafts.length > 1 ? "s" : ""} not saved yet
+        <div className="sticky top-16 z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary-soft p-4 shadow-sm md:top-3">
+          <div className="text-sm font-semibold text-primary">
+            {weekDrafts.length} new dut{weekDrafts.length > 1 ? "ies" : "y"} not saved yet
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setDrafts((l) => l.filter((d) => !weekDrafts.includes(d)))}>
+            <Button variant="ghost" onClick={() => setDrafts((l) => l.filter((d) => !weekDrafts.includes(d)))}>
               Discard
             </Button>
-            <Button size="sm" variant="primary" disabled={saving} onClick={saveAll}>
+            <Button variant="primary" disabled={saving} onClick={saveAll}>
               {saving ? "Saving…" : "Save all"}
             </Button>
           </div>
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {weekDates(week, addDays).map((date) => (
           <DayPlan
             key={date}
@@ -158,9 +139,9 @@ function DayPlan({
   }
 
   return (
-    <Card className="p-4">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
-        <div className="font-semibold">{fmtDate(date)}</div>
+    <Card className="border border-line p-5">
+      <div className="mb-4 flex items-baseline justify-between gap-2">
+        <div className="text-base font-semibold">{fmtDate(date)}</div>
         <div className="text-xs text-ink-faint">
           {slots.length + drafts.length} slot{slots.length + drafts.length === 1 ? "" : "s"}
         </div>
@@ -168,7 +149,7 @@ function DayPlan({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
-          <div className="mb-1.5 text-xs font-medium text-ink-soft">Available</div>
+          <div className="mb-2 text-sm font-medium text-ink-soft">Free that day</div>
           {windows.length === 0 ? (
             <div className="text-xs text-ink-faint">Nobody has said they&apos;re free.</div>
           ) : (
@@ -178,7 +159,7 @@ function DayPlan({
                   key={w.id}
                   onClick={() => onAdd({ userId: w.userId, date, start: w.start, end: w.end, note: "" })}
                   title={w.note ?? "Click to assign this window"}
-                  className="rounded-md border border-line bg-muted px-2 py-1 text-left text-xs hover:border-primary hover:bg-primary-soft"
+                  className="rounded-full border border-line bg-muted px-3 py-1.5 text-left text-sm hover:border-primary hover:bg-primary-soft"
                 >
                   <span className="font-medium">{w.name}</span>{" "}
                   <span className="tabular-nums text-ink-soft">
@@ -189,7 +170,7 @@ function DayPlan({
             </div>
           )}
 
-          <div className="mt-3 mb-1.5 text-xs font-medium text-ink-soft">Assigned</div>
+          <div className="mt-4 mb-2 text-sm font-medium text-ink-soft">On duty</div>
           {slots.length + drafts.length === 0 ? (
             <div className="text-xs text-ink-faint">Nobody scheduled</div>
           ) : (
@@ -225,9 +206,9 @@ function DayPlan({
           )}
         </div>
 
-        <div className="rounded-lg bg-muted/60 p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="text-xs font-medium text-ink-soft">Quick assign</div>
+        <div className="rounded-xl bg-muted/60 p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="text-sm font-medium text-ink-soft">Quick assign</div>
             <label className="flex items-center gap-1.5 text-xs text-ink-soft">
               <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
               Show everyone

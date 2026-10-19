@@ -35,6 +35,8 @@ export type ItemRow = {
   stock: number;
   owed: number;
   lastUnitCost: number | null;
+  /** What the units on the shelf cost us (sum of each FIFO batch left × its price). */
+  stockValue: number;
 };
 
 /** Items with live stock and their latest buy price. */
@@ -62,12 +64,19 @@ export async function listItems(db: DB, opts: { all?: boolean; id?: string } = {
     .from(t.lots)
     .orderBy(t.lots.itemId, desc(t.lots.createdAt));
   const lastCost = new Map(lastCosts.map((l) => [l.itemId, l.unitCost]));
+  const values = await db
+    .select({ itemId: t.lots.itemId, value: sql<number>`sum(${t.lots.qtyLeft} * ${t.lots.unitCost})::int` })
+    .from(t.lots)
+    .where(sql`${t.lots.qtyLeft} > 0`)
+    .groupBy(t.lots.itemId);
+  const value = new Map(values.map((v) => [v.itemId, v.value]));
 
   return rows.map(({ updatedAt, ...r }) => ({
     ...r,
     imageVersion: new Date(updatedAt).getTime(),
     stock: stock.get(r.id) ?? 0,
     lastUnitCost: lastCost.get(r.id) ?? null,
+    stockValue: value.get(r.id) ?? 0,
   }));
 }
 

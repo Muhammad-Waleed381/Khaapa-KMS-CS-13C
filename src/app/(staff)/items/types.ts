@@ -11,6 +11,24 @@ export type Item = {
   stock: number;
   owed: number;
   lastUnitCost: number | null;
+  /** Cost of the units on the shelf. Older cached lists may not have it. */
+  stockValue?: number;
+};
+
+export type StockStatus = "ok" | "low" | "out" | "oversold";
+
+export function stockStatus(i: Item): StockStatus {
+  if (i.owed > 0) return "oversold";
+  if (i.stock <= 0) return "out";
+  if (i.stock <= i.lowStockAt) return "low";
+  return "ok";
+}
+
+export const STATUS_LABEL: Record<StockStatus, string> = {
+  ok: "In stock",
+  low: "Running low",
+  out: "Out of stock",
+  oversold: "Oversold",
 };
 
 export const imgSrc = (i: Pick<Item, "id" | "imageVersion">) => `/api/img/${i.id}?v=${i.imageVersion}`;

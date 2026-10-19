@@ -58,3 +58,23 @@ export const POST = route(async (req) => {
     .returning();
   return { availability: row };
 });
+
+const replaceBody = z.object({
+  windows: z
+    .array(z.object({ weekday: z.number().int().min(0).max(6), start: hhmm, end: hhmm }).refine(timeRange, rangeMsg))
+    .max(60),
+});
+
+// Replace all of my weekly windows at once (the tap-to-select grid saves this way).
+export const PUT = route(async (req) => {
+  const user = await requireUser();
+  const { windows } = await parseBody(req, replaceBody);
+  if (user.role !== "admin" && !(await getSetting("availability_open", false)))
+    throw new HttpError(403, "Availability collection is closed");
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.delete(t.availability).where(eq(t.availability.userId, user.id));
+    if (windows.length) await tx.insert(t.availability).values(windows.map((w) => ({ ...w, userId: user.id })));
+  });
+  return { saved: windows.length };
+});

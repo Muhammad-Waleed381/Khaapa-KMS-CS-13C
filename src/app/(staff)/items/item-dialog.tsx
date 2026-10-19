@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { ColumnChart } from "@/components/charts";
+import { Disclosure, Explainer } from "@/components/kit";
 import { toast } from "@/components/toast";
 import { Badge, Button, cx, Empty, Field, Input, Modal, Spinner, type Tone } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { useMe } from "@/lib/client/me";
 import { rs, toPaisa } from "@/lib/money";
-import { fmtDateTime } from "@/lib/time";
+import { fmtDateTime, pkDate } from "@/lib/time";
 import { ItemForm } from "./item-form";
 import { type Item } from "./types";
 
-type Tab = "restock" | "waste" | "count" | "prices" | "history" | "edit";
+export type Tab = "restock" | "waste" | "count" | "prices" | "history" | "edit";
 
 type Move = {
   id: string;
@@ -39,16 +41,18 @@ const KIND: Record<Move["kind"], { label: string; tone: Tone }> = {
 
 export function ItemDialog({
   item,
+  initialTab = "restock",
   categories,
   onClose,
   onChanged,
 }: {
   item: Item;
+  initialTab?: Tab;
   categories: string[];
   onClose: () => void;
   onChanged: (item: Item | null) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("restock");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const { isAdmin } = useMe();
   const history = useApi<HistoryData>(
     tab === "history" || tab === "prices" ? `/api/items/${item.id}/moves?limit=30` : null,
@@ -89,8 +93,8 @@ export function ItemDialog({
   }
 
   const tabs: [Tab, string][] = [
-    ["restock", "Restock"],
-    ["waste", "Waste"],
+    ["restock", "Add stock"],
+    ["waste", "Remove"],
     ["count", "Count"],
     ["prices", "Prices"],
     ["history", "History"],
@@ -99,24 +103,28 @@ export function ItemDialog({
 
   return (
     <Modal open onClose={onClose} wide title={item.name}>
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-soft">
-        <span>
-          Sells for <b className="text-ink">{rs(item.price)}</b>
-        </span>
-        <span>
-          In stock <b className={cx(item.stock <= item.lowStockAt ? "text-destructive" : "text-ink")}>{item.stock}</b>
-        </span>
-        {item.owed > 0 && <Badge tone="bad">Oversold {item.owed}</Badge>}
-        {!item.active && <Badge>Archived</Badge>}
+      <div className="mb-5 grid grid-cols-3 gap-2">
+        <Fact label="Sells for" value={rs(item.price)} />
+        <Fact
+          label="On the shelf"
+          value={item.owed > 0 ? `${item.owed} short` : item.stock}
+          warn={item.stock <= item.lowStockAt}
+        />
+        <Fact label="Last bought at" value={item.lastUnitCost === null ? "—" : rs(item.lastUnitCost)} />
       </div>
+      {!item.active && (
+        <div className="mb-4">
+          <Badge>Archived: hidden from the Counter and the rate list</Badge>
+        </div>
+      )}
 
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-lg bg-muted p-1">
+      <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-muted p-1">
         {tabs.map(([k, label]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             className={cx(
-              "flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition",
+              "min-h-9 flex-1 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition",
               tab === k ? "bg-surface text-ink shadow-sm" : "text-ink-soft hover:text-ink",
             )}
           >
@@ -125,7 +133,7 @@ export function ItemDialog({
         ))}
       </div>
 
-      {tab === "restock" && <RestockForm onSubmit={stockAction} />}
+      {tab === "restock" && <RestockForm price={item.price} onSubmit={stockAction} />}
       {tab === "waste" && <WasteForm stock={item.stock} onSubmit={stockAction} />}
       {tab === "count" && <CountForm stock={item.stock} onSubmit={stockAction} />}
       {(tab === "history" || tab === "prices") &&
@@ -163,7 +171,7 @@ export function ItemDialog({
   );
 }
 
-function RestockForm({ onSubmit }: { onSubmit: (b: object) => Promise<boolean> }) {
+function RestockForm({ price, onSubmit }: { price: number; onSubmit: (b: object) => Promise<boolean> }) {
   const [qty, setQty] = useState("");
   const [mode, setMode] = useState<"total" | "unit">("total");
   const [cost, setCost] = useState("");
@@ -174,13 +182,14 @@ function RestockForm({ onSubmit }: { onSubmit: (b: object) => Promise<boolean> }
   const q = Math.floor(Number(qty));
   const c = Number(cost);
   const unit = q > 0 && cost !== "" ? (mode === "total" ? toPaisa(c) / q : toPaisa(c)) : null;
+  const margin = unit === null ? null : price - Math.round(unit);
 
   return (
     <form
-      className="space-y-3"
+      className="space-y-4"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!(q > 0) || cost === "" || !(c >= 0)) return toast("Enter quantity and cost", "bad");
+        if (!(q > 0) || cost === "" || !(c >= 0)) return toast("Enter how many you bought and what you paid", "bad");
         setBusy(true);
         const ok = await onSubmit({
           kind: "restock",
@@ -198,27 +207,45 @@ function RestockForm({ onSubmit }: { onSubmit: (b: object) => Promise<boolean> }
       }}
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Quantity">
-          <Input type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
+        <Field label="How many did you buy?">
+          <Input className="h-11 text-base" type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
         </Field>
-        <Field label={mode === "total" ? "Total paid (Rs)" : "Cost per unit (Rs)"}>
-          <Input type="number" inputMode="decimal" min={0} step="any" value={cost} onChange={(e) => setCost(e.target.value)} />
+        <Field label={mode === "total" ? "Total you paid (Rs)" : "Price for one (Rs)"}>
+          <Input className="h-11 text-base" type="number" inputMode="decimal" min={0} step="any" value={cost} onChange={(e) => setCost(e.target.value)} />
         </Field>
       </div>
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <button type="button" className="font-medium text-primary" onClick={() => setMode(mode === "total" ? "unit" : "total")}>
-          {mode === "total" ? "Enter cost per unit instead" : "Enter total paid instead"}
-        </button>
-        {unit !== null && <span className="text-ink-soft">= {rs(Math.round(unit))} per unit</span>}
-      </div>
-      <Field label="Supplier (optional)">
-        <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Metro" />
-      </Field>
-      <Field label="Note (optional)">
-        <Input value={note} onChange={(e) => setNote(e.target.value)} />
-      </Field>
-      <Button variant="primary" className="w-full" disabled={busy}>
-        {busy ? "Saving…" : "Add stock"}
+      <button type="button" className="text-sm font-medium text-primary" onClick={() => setMode(mode === "total" ? "unit" : "total")}>
+        {mode === "total" ? "I know the price for one instead" : "I know the total I paid instead"}
+      </button>
+
+      {unit !== null && (
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted/60 p-3 text-sm">
+          <div>
+            <div className="text-ink-soft">Each one cost</div>
+            <div className="text-lg font-semibold tabular-nums">{rs(Math.round(unit))}</div>
+          </div>
+          <div>
+            <div className="text-ink-soft">You make on each</div>
+            <div className={cx("text-lg font-semibold tabular-nums", margin !== null && margin < 0 && "text-destructive")}>
+              {rs(margin)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Disclosure summary="Supplier and note (optional)">
+        <div className="space-y-3">
+          <Field label="Where from">
+            <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Metro" />
+          </Field>
+          <Field label="Note">
+            <Input value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </div>
+      </Disclosure>
+
+      <Button variant="primary" size="lg" className="w-full" disabled={busy}>
+        {busy ? "Saving…" : "Add to stock"}
       </Button>
     </form>
   );
@@ -240,10 +267,10 @@ function WasteForm({ stock, onSubmit }: { stock: number; onSubmit: (b: object) =
         setBusy(false);
       }}
     >
-      <p className="text-sm text-ink-soft">Remove expired, damaged or wasted units. They are valued at FIFO cost.</p>
+      <Explainer>For things that expired, broke or got eaten. They come off the shelf and their cost counts as a loss.</Explainer>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Quantity removed" hint={`${Math.max(stock, 0)} on the shelf`}>
-          <Input type="number" inputMode="numeric" min={1} max={Math.max(stock, 0)} value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
+        <Field label="How many?" hint={`${Math.max(stock, 0)} on the shelf`}>
+          <Input className="h-11 text-base" type="number" inputMode="numeric" min={1} max={Math.max(stock, 0)} value={qty} onChange={(e) => setQty(e.target.value)} autoFocus />
         </Field>
         <Field label="Reason">
           <Input list="waste-reasons" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -254,8 +281,8 @@ function WasteForm({ stock, onSubmit }: { stock: number; onSubmit: (b: object) =
           </datalist>
         </Field>
       </div>
-      <Button variant="danger" className="w-full" disabled={busy}>
-        {busy ? "Saving…" : "Write off"}
+      <Button variant="danger" size="lg" className="w-full" disabled={busy}>
+        {busy ? "Saving…" : "Remove from stock"}
       </Button>
     </form>
   );
@@ -278,20 +305,20 @@ function CountForm({ stock, onSubmit }: { stock: number; onSubmit: (b: object) =
         setBusy(false);
       }}
     >
-      <p className="text-sm text-ink-soft">
-        Currently <b className="text-ink">{stock}</b> in the system. Enter the actual count on the shelf; the difference
-        is logged as a correction.
-      </p>
+      <Explainer>
+        The app thinks there are <b className="text-ink">{stock}</b>. Count what&apos;s really on the shelf and enter it here.
+        The difference is saved as a correction.
+      </Explainer>
       <Field
-        label="Actual count on the shelf"
+        label="How many are on the shelf?"
         hint={diff === null ? undefined : diff === 0 ? "Matches the system" : `${diff > 0 ? "+" : ""}${diff} will be logged`}
       >
-        <Input type="number" inputMode="numeric" min={0} value={counted} onChange={(e) => setCounted(e.target.value)} autoFocus />
+        <Input className="h-11 text-base" type="number" inputMode="numeric" min={0} value={counted} onChange={(e) => setCounted(e.target.value)} autoFocus />
       </Field>
       <Field label="Note (optional)">
         <Input value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
-      <Button variant="primary" className="w-full" disabled={busy}>
+      <Button variant="primary" size="lg" className="w-full" disabled={busy}>
         {busy ? "Saving…" : "Save count"}
       </Button>
     </form>
@@ -370,59 +397,96 @@ function History({ moves, lots }: { moves: Move[]; lots: Lot[] }) {
 /** Every batch bought and every price it sold at, so price changes are easy to follow. */
 function Prices({ item, batches, prices }: { item: Item; batches: Lot[]; prices: PricePoint[] }) {
   // The oldest batch with stock left is the one sales draw from next.
-  const sellingNow = [...batches].reverse().find((b) => b.qtyLeft > 0)?.id;
+  const sellingNow = [...batches].reverse().find((b) => b.qtyLeft > 0);
+  const chart = [...batches].reverse().map((b) => ({
+    label: new Date(b.createdAt).toLocaleDateString("en-PK", { day: "numeric", month: "short", timeZone: "Asia/Karachi" }),
+    hint: `Bought ${b.qtyIn} on ${pkDate(b.createdAt)}${b.supplier ? ` · ${b.supplier}` : ""}`,
+    values: { cost: b.unitCost },
+  }));
+
   return (
-    <div className="space-y-5">
-      <p className="text-xs text-ink-soft">
-        Each batch keeps the price you paid. Sales use the oldest batch first, and each sale keeps the price it was
-        sold at, so changing prices never changes past profit.
-      </p>
-      <section>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Batches bought</h4>
-        {batches.length === 0 ? (
-          <Empty>No stock bought yet. Use Restock to add a batch with its buy price.</Empty>
-        ) : (
-          <div className="divide-y divide-line rounded-lg border border-line">
-            {batches.map((b) => (
-              <div key={b.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium tabular-nums">{rs(b.unitCost)} each</span>
-                    <span className="text-ink-soft">
-                      bought {b.qtyIn}, {b.qtyLeft} left
-                    </span>
-                    {b.id === sellingNow && <Badge tone="accent">Selling now</Badge>}
-                    {b.qtyLeft === 0 && <Badge>Sold out</Badge>}
-                  </div>
-                  {b.supplier && <div className="truncate text-xs text-ink-soft">{b.supplier}</div>}
-                </div>
-                <div className="shrink-0 text-right text-xs text-ink-faint">{fmtDateTime(b.createdAt)}</div>
+    <div className="space-y-6">
+      <Explainer>
+        Every batch keeps the price you paid for it. Sales use the oldest batch first, and every sale keeps the price it
+        was sold at, so changing a price never changes past profit.
+      </Explainer>
+
+      {batches.length === 0 ? (
+        <Empty>No stock bought yet. Use Add stock to record a batch and what you paid.</Empty>
+      ) : (
+        <>
+          <section className="space-y-5">
+            <h4 className="text-sm font-semibold">What you paid for one, batch by batch</h4>
+            <ColumnChart
+              data={chart}
+              series={[{ key: "cost", label: "Bought at" }]}
+              format={(v) => rs(v)}
+              toAxis={(v) => v / 100}
+              height={150}
+            />
+          </section>
+
+          {sellingNow && (
+            <div className="rounded-xl bg-primary-soft/60 p-4 text-sm">
+              <div className="text-ink-soft">Selling now from the batch bought {fmtDateTime(sellingNow.createdAt)}</div>
+              <div className="mt-0.5 text-base font-semibold text-ink">
+                {rs(sellingNow.unitCost)} each · {sellingNow.qtyLeft} of {sellingNow.qtyIn} left
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-      <section>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Sell prices</h4>
-        <div className="divide-y divide-line rounded-lg border border-line">
-          <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-            <span>
-              <span className="font-medium">{rs(item.price)}</span> <span className="text-ink-soft">current price</span>
-            </span>
-          </div>
+            </div>
+          )}
+
+          <Disclosure summary={`All ${batches.length} batch${batches.length > 1 ? "es" : ""}`}>
+            <ul className="divide-y divide-line">
+              {batches.map((b) => (
+                <li key={b.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium tabular-nums">{rs(b.unitCost)} each</span>
+                      <span className="text-ink-soft">
+                        bought {b.qtyIn}, {b.qtyLeft} left
+                      </span>
+                      {b.id === sellingNow?.id && <Badge tone="good">Selling now</Badge>}
+                      {b.qtyLeft === 0 && <Badge>Used up</Badge>}
+                    </div>
+                    {b.supplier && <div className="truncate text-xs text-ink-soft">{b.supplier}</div>}
+                  </div>
+                  <div className="shrink-0 text-right text-xs text-ink-faint">{fmtDateTime(b.createdAt)}</div>
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        </>
+      )}
+
+      <section className="space-y-2">
+        <h4 className="text-sm font-semibold">Prices it sold at</h4>
+        <ul className="divide-y divide-line rounded-xl border border-line">
+          <li className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+            <span className="font-semibold tabular-nums">{rs(item.price)}</span>
+            <Badge tone="good">Price now</Badge>
+          </li>
           {prices.map((p) => (
-            <div key={p.unitPrice} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+            <li key={p.unitPrice} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
               <span>
                 <span className="font-medium tabular-nums">{rs(p.unitPrice)}</span>{" "}
-                <span className="text-ink-soft">{p.qty} sold</span>
+                <span className="text-ink-soft">· {p.qty} sold</span>
               </span>
               <span className="text-right text-xs text-ink-faint">
-                {fmtDateTime(p.first)} – {fmtDateTime(p.last)}
+                {pkDate(p.first)} to {pkDate(p.last)}
               </span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
+    </div>
+  );
+}
+
+function Fact({ label, value, warn }: { label: string; value: React.ReactNode; warn?: boolean }) {
+  return (
+    <div className="rounded-xl bg-muted/60 px-3 py-2.5">
+      <div className="text-xs text-ink-soft">{label}</div>
+      <div className={cx("mt-0.5 text-lg font-semibold tabular-nums", warn && "text-destructive")}>{value}</div>
     </div>
   );
 }
