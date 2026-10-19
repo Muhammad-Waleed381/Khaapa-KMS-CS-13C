@@ -8,7 +8,22 @@ Khaapa is a class project (Semester 7, NUST SEECS): a management system for **Kh
 
 It recreates the intent of the live reference app at http://khaapa.deeznust.com/ as a **separate codebase**; nothing was copied from that site. v1 covers everything on the reference site except coupons/promo codes, NayaPay auto-matching and the MCP/AI connector page, which the user said to skip for now.
 
-Status as of 2026-10-19: all v1 modules are built and committed on `main` (16 commits), with nothing pushed. Production build, `tsc` and `eslint` are clean. The local dev database was wiped, so it starts empty.
+Status as of 2026-10-19: all v1 modules are built and on `origin/main`. Production build, `tsc` and `eslint` are clean. The local dev database was wiped, so it starts empty.
+
+### Vision and scope (confirmed with the user)
+
+Khaapa is for the shop's **day-to-day operations** only. It is not growing into anything broader. There are two kinds of users:
+
+- **Staff and admins** sign in and use the staff app to record sales and revenue, manage inventory, and run the duty schedule. The schedule is a mapping of names to times: who reports to the counter when, and who takes over next.
+- **Customers** never sign in. They browse live stock on the public site and place pre-orders.
+
+What's in and out:
+- **Shares stay.** Admins record shareholders and running costs, and the app splits profit per share.
+- **Duty schedule:** dated slots (person, date, start, end). Members submit weekly availability and admins assign slots. **Only admins change slots**, including for swaps and no-shows.
+- **On duty now:** every staff screen shows who the schedule puts at the counter right now and who reports next.
+- **Handover:** a counter shift **ends automatically at the end of the person's duty slot** (section 6.6).
+- **Attendance stays out.** The planned schedule is the record. The counter's shift log is kept, but nothing compares it against the schedule.
+- **Permissions are unchanged:** any active staff member can sell, void and edit items. Admins also manage the team, schedule, shares and settings.
 
 ## 2. Requirements and decisions from the user (don't re-ask)
 
@@ -25,7 +40,8 @@ Status as of 2026-10-19: all v1 modules are built and committed on `main` (16 co
 | Costing | **FIFO**: buy and sell prices change over time, and the oldest units are sold first. Example: bought at Rs 20, later at Rs 30, selling at 40 means profit is 20 per unit until the Rs 20 units run out, then 10. |
 | Inventory | Restocks with buy price; waste/expiry only (no batches or expiry dates); low-stock alerts; supplier optional. |
 | Cash drawer | **Not needed** (no opening float or closing count). |
-| HR scheduler | Members submit availability, then HR assigns all slots at once and can edit later. **No rules enforced.** Attendance checking is **deferred**. |
+| HR scheduler | Members submit availability, then HR assigns all slots at once and can edit later. **No rules enforced.** Attendance checking is **out of scope**. Only admins edit slots (no staff swap requests). |
+| On duty / handover | Staff screens show who's on duty now and who's next. A counter shift **closes automatically at the end of the person's duty slot**. |
 | Pre-orders | **Advance payment** (NayaPay; customer submits a reference or screenshot, staff verify). Each day has its own cutoff time. |
 | Shares | Shareholders have a share count and purchase price. Profit is divided over all shares, and each person sees their payout plus profit. |
 | Coupons | **Not in v1.** |
@@ -165,7 +181,13 @@ These numbers are verified, through the API and the UI:
   - It flushes the outbox in order to `POST /api/sync` on load, on the `online` event, after each enqueue and every ~20 s, then refreshes the items cache.
   - A permanent 4xx rejection marks that op failed (shown in the UI with a retry) rather than blocking the queue; network errors and 5xx are retried.
   - Exports: `syncNow`, `queueSale`, `queueShift`, `cancelPendingSale`, `retryFailed`, `startSync`, `useSyncState`, `useCounterItems` (stock shown = server stock − pending sales), `useLive`.
-- **Shifts** (`shift.ts`): `startShift`, `endShift`, `useLocalShift`, `adoptShift`. The current shift is kept locally and reconciled with `useMe().shift`.
+- **Shifts** (`shift.ts`): `startShift`, `endShift`, `useLocalShift`, `adoptShift`, `holdShift`, `useShiftAutoEnd`. The current shift is kept locally and reconciled with `useMe().shift`.
+- **Automatic end at slot end** (`src/lib/duty.ts` holds the shared rule):
+  - A shift belongs to the person's first slot that day that hadn't ended when the shift started (`slotForShift`). With no such slot, the shift only ends by hand.
+  - It closes at the slot's end time, or at the last sale on that shift if the handover ran over.
+  - **Device:** `useShiftAutoEnd` in the staff layout checks every 15 s using the slots from `/api/me`, so it works offline. The POS calls `holdShift` while a sale is in the cart, so a handover never wipes it. The `shift_end` op carries `auto: true` so the activity log says it was automatic.
+  - **Server:** `closeOverdueShifts` (`src/lib/server/shifts.ts`) applies the same rule. There's no cron on Vercel Hobby, so `/api/me`, `/api/shifts`, `/api/report` and collecting a pre-order call it first. Whichever side closes first wins; the other's `shift_end` is a duplicate.
+- **On duty now** (`src/components/on-duty.tsx`): `/api/me` returns everyone's `slots` from yesterday to tomorrow. The widget sits in the sidebar, the mobile menu and the POS start screen, and re-renders every 30 s. The layout reloads `/api/me` every 5 minutes to pick up schedule edits.
 - **`POST /api/sync`**:
   - Takes `{ ops: [{ id, type, payload }] }`, up to 100.
   - Op payloads:
@@ -199,7 +221,7 @@ These numbers are verified, through the API and the UI:
 | Pre-orders (staff) | `/orders` (day open/cutoff controls for today and tomorrow, proof viewer, status buttons) | `GET /api/preorders?date=`, `GET /api/preorders/[id]/proof`, `POST /api/preorders/[id]/status {status}` (marking collected runs `recordSale` with method online and stores saleId); `GET /api/preorder-days?from=&to=`, `PUT /api/preorder-days/[date] {open,cutoff,note?}` |
 | Shares | `/shares` (admin) | `GET/POST /api/shareholders`, `PATCH/DELETE /api/shareholders/[id]`; `GET/POST /api/costs`, `DELETE /api/costs/[id]`; `GET /api/shares/summary?from=&to=` (profitPerShare = netProfit / totalShares; per person: ownership %, invested, profit share, payout = invested + profit share) |
 | Settings | `/settings` (admin) | `GET/POST /api/settings` (setting key `shop`) |
-| Auth | `/login` | `/api/auth/*` (Auth.js), `GET /api/me` → `{user, shift, onCounter}` |
+| Auth | `/login` | `/api/auth/*` (Auth.js), `GET /api/me` → `{user, shift, onCounter, slots}` |
 
 ## 8. Commit history (oldest first)
 
@@ -229,6 +251,9 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
 - Every module's API was tested with curl against the dev server, including the FIFO, oversell, void, idempotent-sync, pre-order and permission cases.
 - Headless Chrome (desktop and 390px phone) loaded every staff page and the public pages with **no console or page errors**.
 - A real cash sale went through the POS UI and synced with the correct lines and change.
+- Automatic shift end at slot end:
+  - With curl: the server closes at the slot end, closes at the last sale when a handover runs over, leaves the shift open while the slot runs, and logs the `auto` message.
+  - In headless Chromium: the "On duty now" widget showed the current person and who's next (sidebar, start screen and phone menu), then switched to the next person at the handover. A cart held the shift open past the slot end. Completing the sale closed the shift on the device with a toast, and the server recorded `endedAt` at the sale time.
 
 **Not yet verified:**
 - Going offline in a real browser: the service worker only runs in production, so test it with `npm run build && npm start`, or with `NEXT_PUBLIC_SW_DEV=1`.
@@ -239,7 +264,8 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
 ## 10. Known gaps and possible next steps
 
 - **Waiting on the user:** the exact shop coordinates, plus the real NayaPay details, opening hours and WhatsApp number (the current ones are placeholders set through `/settings`).
-- **Deferred:** attendance (comparing shifts against slots), coupons/promo codes, NayaPay payment matching, and the MCP/AI connector.
+- **Deferred:** coupons/promo codes, NayaPay payment matching, and the MCP/AI connector. Attendance (comparing shifts against slots) is out of scope.
+- **Auto-end edge case:** if an admin assigns a slot that has already ended to someone mid-shift, their shift closes at that slot's end (or their last sale). They start a new shift to keep selling.
 - **Vercel Hobby:** the plan is officially non-commercial, so mention this if the shop uses it long-term. Its cron is limited to once a day, so any future background job should be triggered by the app rather than on a timer.
 - **Voids:**
   - Voiding needs the network (`/sales` page). The counter can only cancel sales that haven't synced yet.
