@@ -297,7 +297,8 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
 - `npm run seed:reference` only imports the menu and photos.
 
 **Testing without touching production:**
-- `.env.local` points at **production Neon**. To test against a local database, start a second dev server: `DATABASE_URL= NEXT_DIST_DIR=.next-test npx next dev -p 3100`. `distDir` is read from `NEXT_DIST_DIR` so it can run beside the user's own `npm run dev`.
+- `.env.local` points at **production Neon**. To test against a local database, stop the user's `npm run dev` (ask first) and run `DATABASE_URL= npm run dev`. With `DATABASE_URL` empty, the app uses PGlite in `./.data`.
+- **Never run a second Next dev server or a `next build` with a different `distDir` inside the project folder while the user's dev server is running.** Its build output lands in the watched project tree and makes the user's server recompile and reload the browser about twice a second, which looks like an infinite render loop. This happened once. If you need an isolated server, put it in a separate git worktree outside the project folder.
 - The dev login admin email must be in `ADMIN_EMAILS`. The user changed it to their real accounts, so `admin.bscs23seecs@…` is no longer an admin.
 
 **Gotchas:**
