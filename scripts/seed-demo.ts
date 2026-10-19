@@ -85,6 +85,8 @@ const rows = {
   shareholders: [] as Row<typeof t.shareholders>[],
   costs: [] as Row<typeof t.costs>[],
   activity: [] as Row<typeof t.activity>[],
+  paymentAccounts: [] as Row<typeof t.paymentAccounts>[],
+  sharePurchases: [] as Row<typeof t.sharePurchases>[],
 };
 const log = (userId: string | null, kind: string, message: string, createdAt: Date, ref?: string) => {
   if (isPast(createdAt)) rows.activity.push({ userId, kind, message, ref, createdAt });
@@ -126,6 +128,27 @@ for (const p of [...members, ayesha]) {
 }
 const freeAt = (p: Person, wd: number, s: string, e: string) =>
   rows.availability.some((a) => a.userId === p.id && a.weekday === wd && a.start <= s && a.end >= e);
+
+// ---------------------------------------------------------------- payment accounts
+
+// The shop's main wallet. For two weeks it hit its monthly limit, so online
+// payments went to the treasurer's JazzCash, then back.
+const mkAccount = (label: string, provider: string, accountTitle: string, accountNumber: string, createdAt: Date) => {
+  const id = randomUUID();
+  rows.paymentAccounts.push({ id, label, provider, accountTitle, accountNumber, active: true, createdBy: ali.id, createdAt });
+  return { id, label, provider, accountNumber };
+};
+const mainAccount = mkAccount("Shop main", "NayaPay", "Khaapa SEECS", "0300 0000 101", at(addDays(START, -2), 21 * 60));
+const backupAccount = mkAccount("Treasurer (backup)", "JazzCash", ayesha.name, "0300 0000 202", at(addDays(START, 15), 12 * 60));
+const SWITCH_AWAY = at(addDays(START, 16), 9 * 60 + 5);
+const SWITCH_BACK = at(addDays(START, 30), 9 * 60 + 10);
+const accountAt = (when: Date) => (when >= SWITCH_AWAY && when < SWITCH_BACK ? backupAccount : mainAccount);
+const describe = (a: { label: string; provider: string; accountNumber: string }) => `${a.label} (${a.provider} ••${a.accountNumber.slice(-4)})`;
+log(ali.id, "account", `Added payment account ${describe(mainAccount)}`, at(addDays(START, -2), 21 * 60 + 1), mainAccount.id);
+log(ali.id, "account", `${ali.name} switched online payments to ${describe(mainAccount)}`, at(addDays(START, -2), 21 * 60 + 2), mainAccount.id);
+log(ayesha.id, "account", `Added payment account ${describe(backupAccount)}`, at(addDays(START, 15), 12 * 60 + 1), backupAccount.id);
+log(members[0].id, "account", `${members[0].name} switched online payments to ${describe(backupAccount)}`, SWITCH_AWAY, backupAccount.id);
+log(ayesha.id, "account", `${ayesha.name} switched online payments to ${describe(mainAccount)}`, SWITCH_BACK, mainAccount.id);
 
 // ---------------------------------------------------------------- items
 
@@ -318,6 +341,7 @@ function sell(
   const syncDelay = chance(0.04) ? int(5 * 60, 40 * 60) : int(1, 25);
   const sale: SaleRow = {
     id, userId: user.id, shiftId, method, total, cost, oversold, preorderId,
+    accountId: method === "online" ? accountAt(when).id : null,
     cashReceived, change: cashReceived === null ? null : cashReceived - total,
     createdAt: when, syncedAt: new Date(when.getTime() + syncDelay * 1000),
   };
@@ -370,18 +394,55 @@ const totalWeight = sellable.reduce((s, i) => s + i.weight, 0);
 const daily = (it: Sim) => (avgSales * 1.75 * it.weight) / totalWeight;
 const target = (it: Sim) => Math.max(it.caseSize, Math.ceil((daily(it) * 4) / it.caseSize) * it.caseSize) + it.lowStockAt;
 
+// Shares: Rs 5,000 each, at most 3 per person. The two founders were entered
+// by hand; everyone else bought through share requests. The price went up to
+// Rs 5,500 in week four, and earlier buyers keep the price they paid.
+const SHARE_CAP = 3;
+const PRICE_RISE = addDays(START, 24);
+const sharePrice = (date: string) => (date < PRICE_RISE ? 500_000 : 550_000);
 const shareholderDay = addDays(START, -3);
-for (const [name, shares, contact] of [
-  [ali.name, 40, "Hostel 3"],
-  [ayesha.name, 30, null],
-  ["Hamza Tariq", 20, null],
-  ["Usman Sheikh", 10, null],
-  ["Zainab Malik", 10, null],
-] as const) {
+for (const p of [ali, ayesha]) {
   const id = randomUUID();
-  rows.shareholders.push({ id, name, contact, shares, pricePerShare: 50_000, boughtOn: shareholderDay, createdAt: at(shareholderDay, 21 * 60) });
-  log(ali.id, "shares", `Added shareholder ${name} (${shares} shares)`, at(shareholderDay, 21 * 60 + 2), id);
+  rows.shareholders.push({ id, name: p.name, contact: "Founder", shares: SHARE_CAP, pricePerShare: 500_000, boughtOn: shareholderDay, createdAt: at(shareholderDay, 21 * 60) });
+  log(ali.id, "shares", `Added shareholder ${p.name} (${SHARE_CAP} shares)`, at(shareholderDay, 21 * 60 + 2), id);
 }
+log(ali.id, "shares", "Opened share sales: Rs 5,000 per share, up to 3 per person", at(shareholderDay, 21 * 60 + 5));
+log(ayesha.id, "shares", "Raised the share price to Rs 5,500", at(PRICE_RISE, 10 * 60));
+const shareRequest = (
+  person: Person, shares: number, date: string, minutes: number,
+  status: "approved" | "rejected" | "pending", note?: string,
+) => {
+  const createdAt = at(date, minutes);
+  if (!isPast(createdAt)) return;
+  const id = randomUUID();
+  const price = sharePrice(date);
+  const decidedAt = status === "pending" ? null : at(addDays(date, 1), 10 * 60 + int(0, 90));
+  const decided = decidedAt && isPast(decidedAt) ? decidedAt : null;
+  const req: Row<typeof t.sharePurchases> = {
+    id, userId: person.id, shares, pricePerShare: price, total: shares * price, accountId: mainAccount.id,
+    paymentRef: `NP${int(10000000, 99999999)}`, status: decided ? status : "pending", note: decided ? note : null,
+    decidedBy: decided ? ayesha.id : null, decidedAt: decided, createdAt,
+  };
+  rows.sharePurchases.push(req);
+  log(person.id, "shares", `${person.name} requested ${shares} share${shares > 1 ? "s" : ""} (${rs(shares * price)})`, createdAt, id);
+  if (!decided) return;
+  if (status === "approved") {
+    rows.shareholders.push({
+      name: person.name, contact: `${person.name.toLowerCase().replace(/\s+/g, ".")}@demo.khaapa.invalid`, shares, pricePerShare: price,
+      boughtOn: pkDate(decided), userId: person.id, purchaseId: id, createdAt: decided,
+    });
+    log(ayesha.id, "shares", `Approved ${person.name}'s request for ${shares} share${shares > 1 ? "s" : ""} at ${rs(price)}`, decided, id);
+  } else {
+    log(ayesha.id, "shares", `Rejected ${person.name}'s share request${note ? ` (${note})` : ""}`, decided, id);
+  }
+};
+shareRequest(members[0], 2, addDays(START, -2), 13 * 60, "approved"); // Hamza
+shareRequest(members[2], 1, addDays(START, 1), 19 * 60, "approved"); // Usman
+shareRequest(members[3], 2, addDays(START, 3), 21 * 60, "approved"); // Zainab
+shareRequest(lateJoin, 1, addDays(START, 8), 20 * 60, "rejected", "Payment not received");
+shareRequest(members[1], 1, addDays(START, 26), 18 * 60, "approved"); // Fatima, at the new price
+shareRequest(members[4], 1, addDays(START, 33), 17 * 60, "approved"); // Bilal
+shareRequest(members[5], 1, addDays(TODAY, -1), 20 * 60, "pending"); // Hira, waiting
 const addCost = (date: string, rupees: number, note: string, by: Person, minutes = 18 * 60) => {
   const when = at(date, minutes);
   if (!isPast(when)) return;
@@ -514,7 +575,7 @@ for (const [dayIndex, date] of dates.entries()) {
         const customer = `${pick(FIRST)} ${pick(LAST)}`;
         const order: Row<typeof t.preorders> = {
           id, code: c, customerName: customer, phone: `0300-0000${String(int(100, 999))}`,
-          pickupDate: date, total, status: "awaiting_payment", createdAt: placedAt,
+          pickupDate: date, total, status: "awaiting_payment", createdAt: placedAt, accountId: accountAt(placedAt).id,
           lines: lines.map((l) => ({ itemId: l.it.id, name: l.it.name, qty: l.qty, unitPrice: priceOn(l.it, date) })),
         };
         rows.preorders.push(order);
@@ -581,7 +642,7 @@ if (weekday(TOMORROW) <= 4) {
     const customer = `${pick(FIRST)} ${pick(LAST)}`;
     rows.preorders.push({
       id, code: c, customerName: customer, phone: `0300-0000${String(int(100, 999))}`, pickupDate: TOMORROW,
-      total: it.price, status, paymentRef: status === "paid" ? `NP${int(10000000, 99999999)}` : null, createdAt: placedAt,
+      total: it.price, status, paymentRef: status === "paid" ? `NP${int(10000000, 99999999)}` : null, createdAt: placedAt, accountId: mainAccount.id,
       lines: [{ itemId: it.id, name: it.name, qty: 1, unitPrice: it.price }],
     });
     log(null, "preorder", `New pre-order ${c} from ${customer} (${rs(it.price)})`, placedAt, id);
@@ -626,7 +687,7 @@ async function connect(): Promise<{ db: Db; close: () => Promise<void> }> {
 }
 
 const { db, close } = await connect();
-const ALL_TABLES = ["activity", "sale_lines", "stock_moves", "sales", "lots", "shifts", "slots", "availability", "preorders", "preorder_days", "shareholders", "costs", "items", "users", "settings"];
+const ALL_TABLES = ["share_purchases", "payment_accounts", "activity", "sale_lines", "stock_moves", "sales", "lots", "shifts", "slots", "availability", "preorders", "preorder_days", "shareholders", "costs", "items", "users", "settings"];
 const [{ n: existing }] = (await db.execute(sql`select (select count(*) from items) + (select count(*) from sales) as n`)).rows as { n: string }[];
 if (Number(existing) > 0 && !WIPE) {
   console.error("This database already has items or sales. Re-run with --wipe to replace everything (this deletes all data).");
@@ -649,7 +710,13 @@ await db.transaction(async (trx) => {
     whatsapp: "",
   })}::jsonb) on conflict (key) do nothing`);
   await tx.execute(sql`insert into settings (key, value) values ('availability_open', 'false'::jsonb) on conflict (key) do nothing`);
+  await tx.execute(sql`insert into settings (key, value) values ('online_account', ${JSON.stringify({ accountId: accountAt(new Date(NOW)).id })}::jsonb) on conflict (key) do nothing`);
+  await tx.execute(sql`insert into settings (key, value) values ('shares', ${JSON.stringify({
+    pricePerShare: sharePrice(TODAY), maxPerPerson: SHARE_CAP, totalOnOffer: 20, open: true, accountId: mainAccount.id,
+  })}::jsonb) on conflict (key) do nothing`);
   await chunked(t.users, rows.users);
+  await chunked(t.paymentAccounts, rows.paymentAccounts);
+  await chunked(t.sharePurchases, rows.sharePurchases);
   await chunked(t.items, rows.items, 20);
   await chunked(t.lots, rows.lots);
   await chunked(t.shifts, rows.shifts);
