@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { STATUS_LABEL, STATUS_TONE, type DayStatus, type PreorderLine, type PreorderStatus } from "@/components/public/types";
+import { Disclosure, EmptyState, Explainer, Section } from "@/components/kit";
+import { STATUS_LABEL, type DayStatus, type PreorderLine, type PreorderStatus } from "@/components/public/types";
 import { toast } from "@/components/toast";
-import { Badge, Button, Card, cx, Empty, Input, Modal, PageHeader, Spinner, StaleNote } from "@/components/ui";
+import { Badge, Button, cx, Empty, Input, Modal, PageHeader, Spinner, StaleNote } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { rs } from "@/lib/money";
 import { addDays, fmtClock, fmtDate, fmtDateTime, pkDate } from "@/lib/time";
@@ -27,12 +28,23 @@ type Order = {
 
 type Action = "paid" | "ready" | "collected" | "cancelled";
 
-const FILTERS: ("all" | PreorderStatus)[] = ["all", "awaiting_payment", "paid", "ready", "collected", "cancelled"];
+/** The board's columns, in the order an order moves through them. */
+const COLUMNS: { status: PreorderStatus; title: string; hint: string }[] = [
+  { status: "awaiting_payment", title: "Waiting for payment", hint: "Check the screenshot, then confirm." },
+  { status: "paid", title: "Paid", hint: "Get these ready." },
+  { status: "ready", title: "Ready", hint: "Waiting for the customer." },
+  { status: "collected", title: "Collected", hint: "Done. Recorded as sales." },
+];
+
+const NEXT: Partial<Record<PreorderStatus, { action: Action; label: string }>> = {
+  awaiting_payment: { action: "paid", label: "Payment received" },
+  paid: { action: "ready", label: "Mark ready" },
+  ready: { action: "collected", label: "Handed over" },
+};
 
 export default function OrdersPage() {
   const [today, setToday] = useState<string | null>(null);
   const [date, setDate] = useState<string | null>(null);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [proofOf, setProofOf] = useState<Order | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -46,8 +58,7 @@ export default function OrdersPage() {
 
   const { data, loading, stale, reload } = useApi<{ orders: Order[] }>(date ? `/api/preorders?date=${date}` : null);
   const orders = data?.orders ?? [];
-  const shown = orders.filter((o) => filter === "all" || o.status === filter);
-  const count = (s: PreorderStatus) => orders.filter((o) => o.status === s).length;
+  const cancelled = orders.filter((o) => o.status === "cancelled");
 
   async function move(o: Order, status: Action) {
     if (status === "cancelled" && !confirm(`Cancel pre-order ${o.code}?`)) return;
@@ -64,10 +75,10 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl space-y-8">
       <PageHeader
         title="Pre-orders"
-        sub="Verify advance payments, prepare orders and hand them over."
+        sub="Customers order ahead and pay online. Check the payment, get the order ready, hand it over."
         actions={
           <Button onClick={() => reload()} disabled={loading}>
             Refresh
@@ -78,128 +89,148 @@ export default function OrdersPage() {
 
       {today && <DaySettings today={today} />}
 
-      <div className="mt-6 mb-3 flex flex-wrap items-center gap-2">
-        {today && (
-          <div className="flex rounded-lg border border-line bg-surface p-0.5">
-            {[addDays(today, -1), today, addDays(today, 1)].map((d, i) => (
-              <button
-                key={d}
-                onClick={() => setDate(d)}
-                className={cx(
-                  "rounded-md px-3 py-1 text-sm font-medium",
-                  date === d ? "bg-primary-soft text-primary" : "text-ink-soft hover:text-ink",
-                )}
-              >
-                {["Yesterday", "Today", "Tomorrow"][i]}
-              </button>
-            ))}
+      <Section
+        title={date ? `Orders for pickup ${date === today ? "today" : fmtDate(date)}` : "Orders"}
+        description="Each order moves left to right. Press the button on a card when its step is done."
+        action={
+          today && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-lg bg-muted p-0.5">
+                {[addDays(today, -1), today, addDays(today, 1)].map((d, i) => (
+                  <button
+                    key={d}
+                    onClick={() => setDate(d)}
+                    className={cx(
+                      "rounded-md px-3 py-1.5 text-sm font-medium",
+                      date === d ? "bg-card text-ink shadow-sm" : "text-ink-soft hover:text-ink",
+                    )}
+                  >
+                    {["Yesterday", "Today", "Tomorrow"][i]}
+                  </button>
+                ))}
+              </div>
+              <Input type="date" aria-label="Pickup date" value={date ?? ""} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-auto" />
+            </div>
+          )
+        }
+      >
+        {loading && !data ? (
+          <div className="grid place-items-center py-16">
+            <Spinner />
+          </div>
+        ) : orders.length === 0 ? (
+          <EmptyState title="No pre-orders for this day" description="When customers order ahead, their orders show up here." />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-4">
+            {COLUMNS.map((col) => {
+              const list = orders.filter((o) => o.status === col.status);
+              return (
+                <div key={col.status} className="rounded-2xl bg-muted/50 p-3">
+                  <div className="mb-3 px-1">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">{col.title}</h3>
+                      <span className="grid min-w-6 place-items-center rounded-full bg-surface px-1.5 text-xs font-semibold tabular-nums">{list.length}</span>
+                    </div>
+                    <p className="text-xs text-ink-soft">{col.hint}</p>
+                  </div>
+                  <div className="space-y-3">
+                    {list.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-xs text-ink-faint">Nothing here</p>
+                    ) : (
+                      list.map((o) => (
+                        <OrderCard key={o.id} order={o} busy={busy === o.id} onMove={(a) => move(o, a)} onProof={() => setProofOf(o)} />
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-        <Input type="date" value={date ?? ""} onChange={(e) => e.target.value && setDate(e.target.value)} className="w-auto" />
-      </div>
-
-      <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cx(
-              "shrink-0 rounded-full border px-3 py-1 text-xs font-medium",
-              f === filter ? "border-primary bg-primary text-primary-foreground" : "border-line bg-surface text-ink-soft hover:text-ink",
-            )}
-          >
-            {f === "all" ? `All ${orders.length}` : `${STATUS_LABEL[f]} ${count(f)}`}
-          </button>
-        ))}
-      </div>
-
-      {loading && !data ? (
-        <div className="grid place-items-center py-16">
-          <Spinner />
-        </div>
-      ) : shown.length === 0 ? (
-        <Empty>No pre-orders {filter === "all" ? "" : `marked "${STATUS_LABEL[filter]}" `}for {date && fmtDate(date)}.</Empty>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {shown.map((o) => (
-            <Card key={o.id} className="flex flex-col p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-bold tracking-widest">{o.code}</span>
-                    <Badge tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status]}</Badge>
-                  </div>
-                  <div className="mt-0.5 truncate text-sm font-medium">{o.customerName}</div>
-                  <a href={`tel:${o.phone}`} className="text-xs text-ink-soft hover:text-primary">
-                    {o.phone}
-                  </a>
-                </div>
-                <div className="text-right">
-                  <div className="text-base font-semibold tabular-nums">{rs(o.total)}</div>
-                  <div className="text-xs text-ink-faint">{fmtDateTime(o.createdAt)}</div>
-                </div>
-              </div>
-
-              <ul className="mt-3 space-y-0.5 text-sm">
-                {o.lines.map((l) => (
-                  <li key={l.itemId} className="flex justify-between gap-2">
-                    <span>
-                      <b className="tabular-nums">{l.qty}×</b> {l.name}
-                    </span>
-                    <span className="text-ink-soft tabular-nums">{rs(l.qty * l.unitPrice)}</span>
-                  </li>
-                ))}
-              </ul>
-              {o.note && <p className="mt-2 rounded-md bg-muted px-2 py-1 text-xs text-ink-soft">“{o.note}”</p>}
-
-              <div className="mt-3 text-xs text-ink-soft">
-                {o.account && (
-                  <div className="mb-1">
-                    Pay to <span className="font-medium text-ink">{o.account}</span>
-                  </div>
-                )}
-                {o.paymentRef ? (
-                  <>
-                    Payment ref <span className="font-mono font-medium text-ink select-all">{o.paymentRef}</span>
-                    {o.hasProof && (
-                      <button onClick={() => setProofOf(o)} className="ml-2 text-primary hover:underline">
-                        View screenshot
-                      </button>
-                    )}
-                  </>
-                ) : o.status === "awaiting_payment" ? (
-                  "No payment proof yet"
-                ) : null}
-              </div>
-
-              <div className="mt-auto flex flex-wrap gap-2 pt-3">
-                {o.status === "awaiting_payment" && (
-                  <Button size="sm" variant="primary" disabled={busy === o.id} onClick={() => move(o, "paid")}>
-                    Payment received
-                  </Button>
-                )}
-                {o.status === "paid" && (
-                  <Button size="sm" disabled={busy === o.id} onClick={() => move(o, "ready")}>
-                    Mark ready
-                  </Button>
-                )}
-                {(o.status === "paid" || o.status === "ready") && (
-                  <Button size="sm" variant="primary" disabled={busy === o.id} onClick={() => move(o, "collected")}>
-                    Handed over
-                  </Button>
-                )}
-                {o.status !== "collected" && o.status !== "cancelled" && (
-                  <Button size="sm" variant="ghost" disabled={busy === o.id} onClick={() => move(o, "cancelled")}>
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+        {cancelled.length > 0 && (
+          <Disclosure summary={`${cancelled.length} cancelled`}>
+            <ul className="space-y-1 text-sm text-ink-soft">
+              {cancelled.map((o) => (
+                <li key={o.id}>
+                  <span className="font-mono font-semibold text-ink">{o.code}</span> · {o.customerName} · {rs(o.total)}
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        )}
+      </Section>
 
       <ProofModal order={proofOf} onClose={() => setProofOf(null)} />
+    </div>
+  );
+}
+
+function OrderCard({ order: o, busy, onMove, onProof }: { order: Order; busy: boolean; onMove: (a: Action) => void; onProof: () => void }) {
+  const next = NEXT[o.status];
+  const units = o.lines.reduce((n, l) => n + l.qty, 0);
+  return (
+    <div className="space-y-3 rounded-xl border border-line bg-surface p-3.5 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate font-medium">{o.customerName}</div>
+          <div className="flex items-center gap-2 text-xs text-ink-soft">
+            <span className="font-mono font-semibold tracking-wider text-ink">{o.code}</span>
+            <a href={`tel:${o.phone}`} className="hover:text-primary">
+              {o.phone}
+            </a>
+          </div>
+        </div>
+        <div className="text-right text-base font-semibold tabular-nums">{rs(o.total)}</div>
+      </div>
+
+      <ul className="space-y-0.5 text-sm">
+        {o.lines.map((l) => (
+          <li key={l.itemId} className="flex gap-1.5">
+            <b className="tabular-nums">{l.qty}×</b>
+            <span className="min-w-0 truncate">{l.name}</span>
+          </li>
+        ))}
+      </ul>
+      {o.note && <p className="rounded-lg bg-muted px-2.5 py-1.5 text-xs text-ink-soft">“{o.note}”</p>}
+
+      {o.status === "awaiting_payment" &&
+        (o.hasProof ? (
+          <button onClick={onProof} className="group block w-full overflow-hidden rounded-lg border border-line text-left">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/preorders/${o.id}/proof?raw=1`} alt={`Payment screenshot for ${o.code}`} className="h-28 w-full object-cover object-top" loading="lazy" />
+            <span className="block px-2.5 py-1.5 text-xs text-ink-soft group-hover:text-ink">
+              Screenshot{o.account ? ` · paid to ${o.account}` : ""} · tap to enlarge
+            </span>
+          </button>
+        ) : (
+          <p className="rounded-lg bg-warn/10 px-2.5 py-2 text-xs text-warn">No screenshot yet. Wait for the customer to send it.</p>
+        ))}
+
+      {next && (
+        <Button
+          variant={o.status === "awaiting_payment" && !o.hasProof ? "secondary" : "primary"}
+          className="w-full"
+          disabled={busy}
+          onClick={() => onMove(next.action)}
+        >
+          {next.label}
+        </Button>
+      )}
+      {o.status === "paid" && (
+        <button disabled={busy} onClick={() => onMove("collected")} className="w-full text-xs text-ink-soft hover:text-ink">
+          Customer is here already? Hand over now
+        </button>
+      )}
+      {o.status !== "collected" && (
+        <div className="flex items-start justify-between gap-3 text-xs text-ink-faint">
+          <span className="min-w-0">
+            {units} item{units > 1 ? "s" : ""} · ordered {fmtDateTime(o.createdAt)}
+          </span>
+          <button disabled={busy} onClick={() => onMove("cancelled")} className="shrink-0 hover:text-destructive">
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -233,11 +264,14 @@ function ProofModal({ order, onClose }: { order: Order | null; onClose: () => vo
 function DaySettings({ today }: { today: string }) {
   const { data, reload } = useApi<{ days: DayStatus[] }>(`/api/preorder-days?from=${today}&to=${addDays(today, 1)}`);
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {(data?.days ?? []).map((d, i) => (
-        <DayCard key={`${d.date}-${d.open}-${d.cutoff}`} day={d} label={i === 0 ? "Today" : "Tomorrow"} onSaved={reload} />
-      ))}
-    </div>
+    <Section title="Taking orders" description="Open a day for pre-orders and choose the last time customers can order for it.">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(data?.days ?? []).map((d, i) => (
+          <DayCard key={`${d.date}-${d.open}-${d.cutoff}`} day={d} label={i === 0 ? "Today" : "Tomorrow"} onSaved={reload} />
+        ))}
+      </div>
+      <Explainer>Customers pay in advance into the current online account (set at the Counter or in Settings).</Explainer>
+    </Section>
   );
 }
 
@@ -259,7 +293,7 @@ function DayCard({ day, label, onSaved }: { day: DayStatus; label: string; onSav
   }
 
   return (
-    <Card className="p-4">
+    <div className="rounded-2xl border border-line bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="text-sm font-semibold">
@@ -273,7 +307,7 @@ function DayCard({ day, label, onSaved }: { day: DayStatus; label: string; onSav
                 : "Pre-orders closed"}
           </div>
         </div>
-        <Badge tone={day.accepting ? "good" : "neutral"}>{day.accepting ? "Open" : "Closed"}</Badge>
+        <Badge tone={day.accepting ? "good" : "neutral"}>{day.accepting ? "● Open" : "Closed"}</Badge>
       </div>
       <div className="mt-3 flex items-end gap-2">
         <label className="flex-1">
@@ -297,6 +331,6 @@ function DayCard({ day, label, onSaved }: { day: DayStatus; label: string; onSav
           </Button>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

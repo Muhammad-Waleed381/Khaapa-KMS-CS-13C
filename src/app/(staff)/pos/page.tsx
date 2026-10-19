@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, Card, cx, Empty, Input, Modal, Spinner } from "@/components/ui";
+import { BanknoteIcon, ChevronDownIcon, ClockIcon, SmartphoneIcon } from "lucide-react";
+import { ActionCard } from "@/components/kit";
+import { Badge, Button, cx, Empty, Input, Modal, Spinner } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
 import { useMe } from "@/lib/client/me";
@@ -67,46 +69,33 @@ function StartShift({ me }: { me: ReturnType<typeof useMe> }) {
   const [busy, setBusy] = useState(false);
   const others = me.onCounter.filter((o) => o.userId !== me.user.id);
   return (
-    <div className="mx-auto max-w-md pt-6 md:pt-16">
-      <Card className="p-6">
-        <div className="grid size-11 place-items-center rounded-full bg-primary-soft text-primary">
-          <Icon name="shifts" className="size-6" />
-        </div>
-        <h1 className="mt-4 text-lg font-semibold">Start your shift?</h1>
-        <p className="mt-1 text-sm text-ink-soft">While you&apos;re on shift you can:</p>
-        <ul className="mt-3 space-y-1.5 text-sm text-ink-soft">
-          {[
-            "Ring up sales at the counter, cash and online",
-            "Keep selling when the internet drops; sales sync later",
-            "Everything you do is logged under your name",
-          ].map((x) => (
-            <li key={x} className="flex gap-2">
-              <Icon name="check" className="mt-0.5 size-4 shrink-0 text-primary" />
-              {x}
-            </li>
-          ))}
-        </ul>
-        <OnDuty slots={me.slots} className="mt-4" />
+    <div className="mx-auto max-w-2xl space-y-6 pt-4 md:pt-12">
+      <div>
+        <h1 className="font-display text-4xl md:text-5xl">Counter</h1>
+        <p className="mt-1.5 text-sm text-ink-soft">Ring up sales here. Start your shift first so every sale is recorded under your name.</p>
+      </div>
+      <ActionCard
+        icon={<ClockIcon className="size-6" />}
+        title="Start your shift"
+        description="Selling works even when the internet drops. Sales upload by themselves later."
+        cta={busy ? "Starting…" : "Start shift"}
+        onClick={async () => {
+          if (busy) return;
+          setBusy(true);
+          await startShift(me.user.id);
+          toast("Shift started. You're on the counter");
+          syncNow().then(me.reload);
+        }}
+      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <OnDuty slots={me.slots} />
         {others.length > 0 && (
-          <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-ink-soft">
-            On the counter now: {others.map((o) => o.name).join(", ")}
-          </p>
+          <div className="rounded-2xl bg-muted px-3 py-2.5 text-xs">
+            <div className="font-medium text-ink-faint">Also on the counter</div>
+            <div className="mt-1 font-medium text-ink">{others.map((o) => o.name).join(", ")}</div>
+          </div>
         )}
-        <Button
-          variant="primary"
-          size="lg"
-          className="mt-5 w-full"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            await startShift(me.user.id);
-            toast("Shift started. You're on the counter");
-            syncNow().then(me.reload);
-          }}
-        >
-          Start shift
-        </Button>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -216,8 +205,8 @@ function Counter({
     setCartOpen(false);
   }
 
-  const cartPanel = (
-    <CartPanel cart={cart} total={total} onQty={setQty} onClear={() => setCart([])} onComplete={complete} />
+  const cartPanel = (inSheet: boolean) => (
+    <CartPanel cart={cart} total={total} onQty={setQty} onClear={() => setCart([])} onComplete={complete} inSheet={inSheet} />
   );
 
   return (
@@ -274,7 +263,7 @@ function Counter({
         )}
       </div>
 
-      <aside className="hidden w-[380px] shrink-0 border-l border-line bg-surface lg:flex lg:flex-col">{cartPanel}</aside>
+      <aside className="hidden w-[380px] shrink-0 border-l border-line bg-surface lg:flex lg:flex-col">{cartPanel(false)}</aside>
 
       {count > 0 && (
         <button
@@ -289,7 +278,7 @@ function Counter({
       )}
 
       <Modal open={cartOpen} onClose={() => setCartOpen(false)} title="Current sale">
-        <div className="-mx-5 -mb-5">{cartPanel}</div>
+        <div className="-mx-4 -mb-6 sm:-mx-6">{cartPanel(true)}</div>
       </Modal>
 
       <Modal open={!!confirmItem} onClose={() => setConfirmItem(null)} title="Out of stock">
@@ -376,34 +365,52 @@ function CounterHeader({
   onEnd: () => void;
 }) {
   const totals = useTodayTotals();
+  const [open, setOpen] = useState(false);
   return (
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Counter</h1>
-        <p className="text-xs text-ink-soft">
-          On shift since {fmtClock(pkTime(shift.startedAt))}
-          {slotEnd && ` · ends automatically at ${fmtClock(slotEnd)}`}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-3 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs tabular-nums">
-          <span>
-            <span className="text-ink-faint">Cash </span>
-            <b>{rs(totals.cash)}</b>
-          </span>
-          <span>
-            <span className="text-ink-faint">Online </span>
-            <b>{rs(totals.online)}</b>
-          </span>
-          <span className="text-ink-faint">{totals.n} sales today</span>
+    <div className="mb-3 space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-4xl">Counter</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            On shift since {fmtClock(pkTime(shift.startedAt))}
+            {slotEnd && ` · ends at ${fmtClock(slotEnd)}`}
+          </p>
         </div>
-        <Button size="sm" onClick={onRecent}>
-          Recent
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onEnd}>
-          End shift
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line bg-surface px-3 text-sm"
+          >
+            <span className="text-ink-soft">Today</span>
+            <span className="font-semibold tabular-nums">{rs(totals.cash + totals.online)}</span>
+            <ChevronDownIcon className={cx("size-4 text-ink-faint transition", open && "rotate-180")} />
+          </button>
+          <Button size="sm" onClick={onRecent}>
+            Recent
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onEnd}>
+            End shift
+          </Button>
+        </div>
       </div>
+      {open && (
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-line bg-surface p-3 text-sm">
+          <div>
+            <div className="text-xs text-ink-soft">Cash</div>
+            <div className="font-semibold tabular-nums">{rs(totals.cash)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-ink-soft">Online</div>
+            <div className="font-semibold tabular-nums">{rs(totals.online)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-ink-soft">Sales</div>
+            <div className="font-semibold tabular-nums">{totals.n}</div>
+          </div>
+          <p className="col-span-3 text-xs text-ink-faint">Sales rung up on this device today.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -414,11 +421,11 @@ function ItemTile({ item, qty, onAdd }: { item: CachedItem; qty: number; onAdd: 
     <button
       onClick={onAdd}
       className={cx(
-        "group relative flex flex-col overflow-hidden rounded-xl border bg-surface text-left transition active:scale-[.97]",
+        "group relative flex flex-col overflow-hidden rounded-2xl border bg-surface text-left transition active:scale-[.97]",
         qty > 0 ? "border-primary ring-2 ring-primary/20" : "border-line hover:border-ink-faint",
       )}
     >
-      <div className="relative aspect-[4/3] w-full bg-muted">
+      <div className="relative aspect-[4/3] w-full shrink-0 overflow-hidden bg-muted">
         {item.hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -438,10 +445,10 @@ function ItemTile({ item, qty, onAdd }: { item: CachedItem; qty: number; onAdd: 
           </span>
         )}
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-2.5">
-        <div className="line-clamp-2 text-sm font-medium leading-tight">{item.name}</div>
-        <div className="mt-auto flex items-center justify-between gap-1">
-          <span className="text-sm font-semibold tabular-nums">{rs(item.price)}</span>
+      <div className="flex flex-1 flex-col gap-1 p-3">
+        <div className="line-clamp-2 text-[0.9375rem] font-medium leading-snug">{item.name}</div>
+        <div className="mt-auto flex items-center justify-between gap-1 pt-1">
+          <span className="text-base font-semibold tabular-nums">{rs(item.price)}</span>
           {left <= 0 ? (
             <Badge tone="bad">Out</Badge>
           ) : left <= item.lowStockAt ? (
@@ -461,12 +468,15 @@ function CartPanel({
   onQty,
   onClear,
   onComplete,
+  inSheet,
 }: {
   cart: Line[];
   total: number;
   onQty: (itemId: string, qty: number) => void;
   onClear: () => void;
   onComplete: (method: "cash" | "online", cashReceived: number | null) => Promise<void>;
+  /** Shown in the phone sheet, which already has its own title. */
+  inSheet: boolean;
 }) {
   const [method, setMethod] = useState<"cash" | "online">("cash");
   const [received, setReceived] = useState("");
@@ -492,8 +502,8 @@ function CartPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-5 pb-2 pt-4">
-        <h2 className="text-sm font-semibold">Current sale</h2>
+      <div className={cx("flex items-center justify-between px-5 pb-2", inSheet ? "pt-0" : "pt-4")}>
+        <h2 className={cx("text-sm font-semibold", inSheet && "sr-only")}>Current sale</h2>
         {cart.length > 0 && (
           <button onClick={onClear} className="text-xs text-ink-faint hover:text-destructive">
             Clear
@@ -528,38 +538,48 @@ function CartPanel({
         )}
       </div>
 
-      <div className="space-y-3 border-t border-line px-5 py-4">
+      <div className="space-y-4 border-t border-line px-5 py-4">
         <div className="flex items-baseline justify-between">
           <span className="text-sm text-ink-soft">Total</span>
-          <span className="text-2xl font-bold tabular-nums">{rs(total)}</span>
+          <span className="font-display text-5xl tabular-nums">{rs(total)}</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-          {(["cash", "online"] as const).map((m) => (
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Payment">
+          {(
+            [
+              { m: "cash", label: "Cash", Icon: BanknoteIcon },
+              { m: "online", label: "Online", Icon: SmartphoneIcon },
+            ] as const
+          ).map(({ m, label, Icon: PayIcon }) => (
             <button
               key={m}
+              role="radio"
+              aria-checked={method === m}
               onClick={() => setMethod(m)}
               className={cx(
-                "rounded-md py-2 text-sm font-medium capitalize transition",
-                method === m ? "bg-surface text-ink shadow-sm" : "text-ink-soft",
+                "flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-semibold transition",
+                method === m ? "border-primary bg-primary-soft text-ink" : "border-line text-ink-soft hover:border-ink-faint",
               )}
             >
-              {m === "online" ? "Online" : "Cash"}
+              <PayIcon className="size-5" />
+              {label}
             </button>
           ))}
         </div>
 
         {method === "cash" ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
+          <div className="space-y-2.5">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-ink-soft">Customer gave (Rs)</span>
               <Input
                 inputMode="numeric"
-                placeholder={`Received (Rs) — ${total / 100}`}
+                placeholder={`${total / 100} (exact)`}
                 value={received}
                 onChange={(e) => setReceived(e.target.value.replace(/[^\d.]/g, ""))}
                 onKeyDown={(e) => e.key === "Enter" && submit()}
+                className="h-11 text-lg tabular-nums"
               />
-            </div>
+            </label>
             <div className="grid grid-cols-5 gap-1.5">
               {[
                 { label: "Exact", v: total },
@@ -572,7 +592,7 @@ function CartPanel({
                   key={b.label}
                   disabled={b.v < total || cart.length === 0}
                   onClick={() => setReceived(String(b.v / 100))}
-                  className="rounded-md border border-line py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
+                  className="rounded-lg border border-line py-2 text-xs font-medium hover:bg-muted disabled:opacity-40"
                 >
                   {b.label}
                 </button>
@@ -580,16 +600,16 @@ function CartPanel({
             </div>
             <div
               className={cx(
-                "flex items-baseline justify-between rounded-lg px-3 py-2.5",
+                "flex items-center justify-between rounded-2xl px-4 py-3",
                 validCash ? "bg-emerald-50 dark:bg-emerald-950" : "bg-red-50 dark:bg-red-950",
               )}
             >
-              <span className={cx("text-sm", validCash ? "text-emerald-800 dark:text-emerald-300" : "text-red-700 dark:text-red-300")}>
-                {validCash ? "Change due" : "Short by"}
+              <span className={cx("text-sm font-medium", validCash ? "text-emerald-800 dark:text-emerald-300" : "text-red-700 dark:text-red-300")}>
+                {validCash ? "Give back" : "Still needed"}
               </span>
               <span
                 className={cx(
-                  "text-2xl font-bold tabular-nums",
+                  "font-display text-5xl tabular-nums",
                   validCash ? "text-emerald-800 dark:text-emerald-300" : "text-red-700 dark:text-red-300",
                 )}
               >
@@ -598,13 +618,14 @@ function CartPanel({
             </div>
           </div>
         ) : (
-          <div className="space-y-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-ink-soft">
+          <div className="space-y-2 rounded-2xl bg-muted px-4 py-3 text-sm text-ink-soft">
             {current ? (
               <div className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate">
-                  To <b className="text-ink">{describeAccount(current)}</b>
+                <span className="min-w-0">
+                  <span className="block text-xs">Paid to</span>
+                  <b className="block truncate text-ink">{describeAccount(current)}</b>
                 </span>
-                <button onClick={() => setPicking(true)} className="shrink-0 font-medium text-primary hover:underline">
+                <button onClick={() => setPicking(true)} className="shrink-0 rounded-md px-2 py-1 font-medium text-primary hover:bg-surface">
                   Change
                 </button>
               </div>
@@ -618,15 +639,15 @@ function CartPanel({
                 )}
               </div>
             )}
-            <p>
-              Confirm the customer&apos;s payment of <b className="text-ink">{rs(total)}</b> has arrived before completing.
+            <p className="text-xs">
+              Check the payment of <b className="text-ink">{rs(total)}</b> has arrived, then complete the sale.
             </p>
           </div>
         )}
         <AccountPicker open={picking} onClose={() => setPicking(false)} />
 
-        <Button variant="primary" size="lg" className="w-full" disabled={!canComplete} onClick={submit}>
-          Complete sale
+        <Button variant="primary" size="lg" className="h-12 w-full text-base" disabled={!canComplete} onClick={submit}>
+          {cart.length ? `Complete sale · ${rs(total)}` : "Complete sale"}
         </Button>
       </div>
     </div>

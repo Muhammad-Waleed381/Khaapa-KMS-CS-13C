@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2Icon } from "lucide-react";
+import { Steps } from "@/components/kit";
 import { PublicHeader } from "@/components/public/header";
 import { ItemThumb } from "@/components/public/item-thumb";
 import { PaymentStep } from "@/components/public/payment-step";
@@ -25,6 +27,8 @@ export default function PreorderPage() {
   const [busy, setBusy] = useState(false);
   const [placed, setPlaced] = useState<Placed | null>(null);
   const [ordersKey, setOrdersKey] = useState(0);
+  /** The order whose payment screenshot was just sent. */
+  const [done, setDone] = useState<Placed | null>(null);
 
   // Remember the customer's details for next time.
   useEffect(() => {
@@ -67,6 +71,7 @@ export default function PreorderPage() {
         localStorage.setItem("khaapa:customer", JSON.stringify({ name, phone }));
       } catch {}
       rememberOrder(res);
+      setDone(null);
       setPlaced(res);
       setCart({});
       setOrdersKey((k) => k + 1);
@@ -78,24 +83,48 @@ export default function PreorderPage() {
     }
   }
 
-  const onPaid = useCallback(() => {
-    setPlaced(null);
-    setOrdersKey((k) => k + 1);
-  }, []);
+  const onPaid = useCallback(
+    (sent: boolean) => {
+      if (sent) setDone(placed);
+      setPlaced(null);
+      setOrdersKey((k) => k + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [placed],
+  );
+  const step = done ? 3 : placed ? 2 : lines.length > 0 ? 1 : 0;
 
   return (
     <div className="min-h-dvh pb-28">
       <PublicHeader active="preorder" />
       <div className="mx-auto max-w-2xl px-4 pt-6">
-        <h1 className="text-2xl font-bold tracking-tight">Pre-order</h1>
-        <p className="mt-1 text-sm text-ink-soft">
+        <h1 className="font-display text-4xl">Pre-order</h1>
+        <p className="mt-1.5 text-sm text-ink-soft">
           Order for today or tomorrow, pay in advance online, and pick it up at {info?.shop.location.label ?? "SEECS"}.
         </p>
 
-        {placed ? (
-          <div className="mt-6">
+        <Steps
+          className="mt-6"
+          current={step}
+          steps={[{ title: "Choose" }, { title: "Your details" }, { title: "Pay" }, { title: "Done" }]}
+        />
+
+        {done ? (
+          <Card className="mt-6 border border-line p-6 text-center">
+            <CheckCircle2Icon className="mx-auto size-12 text-primary" />
+            <h2 className="mt-3 text-lg font-semibold">Order {done.code} is in</h2>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-ink-soft">
+              We&apos;ll check your payment and get it ready. Show the code <b className="font-mono text-ink">{done.code}</b> when you pick it up.
+              You can follow its status under My orders below.
+            </p>
+            <Button className="mt-5" onClick={() => setDone(null)}>
+              Order something else
+            </Button>
+          </Card>
+        ) : placed ? (
+          <Card className="mt-6 border border-line p-5">
             <PaymentStep order={placed} account={placed.account ?? info?.account} onDone={onPaid} />
-          </div>
+          </Card>
         ) : (
           <>
             <div className="mt-6 grid grid-cols-2 gap-3">

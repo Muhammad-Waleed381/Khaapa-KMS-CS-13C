@@ -18,7 +18,7 @@ type Order = {
   lines: PreorderLine[];
   total: number;
   status: PreorderStatus;
-  paymentRef: string | null;
+  paymentSent: boolean;
   account: PaymentAccount | null;
 };
 
@@ -78,11 +78,11 @@ export function MyOrders({ refreshKey, account }: { refreshKey: number; account?
             <div className="mt-2 flex items-center justify-between gap-3">
               <span className="font-semibold tabular-nums">{rs(o.total)}</span>
               {o.status === "awaiting_payment" &&
-                (o.paymentRef ? (
-                  <span className="text-xs text-ink-faint">Payment sent · being checked</span>
+                (o.paymentSent ? (
+                  <span className="text-xs text-ink-soft">Screenshot sent · being checked</span>
                 ) : (
                   <Button size="sm" variant="primary" onClick={() => setPaying(o)}>
-                    Send payment
+                    Pay now
                   </Button>
                 ))}
             </div>

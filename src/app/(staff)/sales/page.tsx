@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Icon } from "@/components/icons";
+import { useMemo, useState } from "react";
+import { BanknoteIcon, ChevronRightIcon, MoreHorizontalIcon, SmartphoneIcon } from "lucide-react";
+import { ColumnChart, SplitBar, type Datum } from "@/components/charts";
+import { Disclosure, EmptyState, KpiRow, KpiTile, Section } from "@/components/kit";
 import { toast } from "@/components/toast";
-import { Badge, Button, Card, cx, Empty, Field, Input, Modal, PageHeader, Select, Spinner, StaleNote, Stat } from "@/components/ui";
+import { Badge, Button, cx, Field, Input, Modal, PageHeader, Select, Spinner, StaleNote } from "@/components/ui";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api, useApi } from "@/lib/client/api";
 import { rs } from "@/lib/money";
-import { fmtDate, fmtDateTime, pkTime } from "@/lib/time";
+import { fmtClock, fmtDate, fmtDateTime, pkTime } from "@/lib/time";
 import { PeriodPicker, periodLabel, periodQuery, usePeriod } from "./period";
 
 type Sale = {
@@ -60,54 +63,103 @@ export default function SalesPage() {
   const { data, error, stale, reload } = useApi<Data>(period ? `/api/sales?${periodQuery(period)}&${filters}` : null);
   const single = period !== null && period.from === period.to;
 
+  const activeFilters = [method, userId, voided].filter(Boolean).length;
+
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader title="Sales" sub={period ? periodLabel(period) : " "} actions={<PeriodPicker value={period} onChange={setPeriod} />} />
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div>
+        <PageHeader title="Sales" sub={period ? `Everything sold ${period.from === period.to ? "on" : "from"} ${periodLabel(period)}.` : " "} />
+        <div className="-mt-2">
+          <PeriodPicker value={period} onChange={setPeriod} />
+        </div>
+      </div>
       <StaleNote stale={stale} />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <Stat label="Total" value={rs(data?.totals.total)} />
-        <Stat label="Cash" value={rs(data?.totals.cash)} />
-        <Stat label="Online" value={rs(data?.totals.online)} />
-        <Stat label="Sales" value={data?.totals.count ?? 0} />
-        <Stat label="Voided" value={data?.totals.voids ?? 0} />
-      </div>
+      <KpiRow>
+        <KpiTile label="Total sold" value={rs(data?.totals.total)} hint={data?.totals.voids ? `${data.totals.voids} voided, not counted` : undefined} />
+        <KpiTile label="Cash" value={rs(data?.totals.cash)} />
+        <KpiTile label="Online" value={rs(data?.totals.online)} />
+        <KpiTile label="Sales" value={data?.totals.count ?? 0} />
+      </KpiRow>
 
-      {data && data.accounts.length > 0 && <AccountsCard accounts={data.accounts} />}
-
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        <Select value={method} onChange={(e) => setMethod(e.target.value)}>
-          <option value="">All payments</option>
-          <option value="cash">Cash</option>
-          <option value="online">Online</option>
-        </Select>
-        <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-          <option value="">All cashiers</option>
-          {data?.cashiers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
-        <Select value={voided} onChange={(e) => setVoided(e.target.value)}>
-          <option value="">Voided + not</option>
-          <option value="0">Not voided</option>
-          <option value="1">Voided only</option>
-        </Select>
-      </div>
-
-      {error && !data && <Empty>{error}</Empty>}
-      {data && !data.days.length && <Empty>No sales in this period.</Empty>}
-
-      {single ? (
-        <SaleList sales={data?.sales ?? []} onVoid={setVoiding} />
-      ) : (
-        <div className="space-y-2">
-          {data?.days.map((d) => (
-            <DayGroup key={`${d.date}-${version}`} day={d} filters={filters.toString()} onVoid={setVoiding} />
-          ))}
+      {data && data.totals.count > 0 && (
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="rounded-2xl border border-line bg-surface p-5 lg:col-span-3">
+            <h2 className="text-base font-semibold">{single ? "Sales by hour" : "Sales by day"}</h2>
+            <p className="text-sm text-ink-soft">{single ? "When customers bought." : "Money taken each day."}</p>
+            {/* Room for the top axis label, which sits above the plot. */}
+            <div className="pt-8">
+              <SalesChart data={data} single={single} />
+            </div>
+          </div>
+          <div className="space-y-6 rounded-2xl border border-line bg-surface p-5 lg:col-span-2">
+            <div>
+              <h2 className="mb-3 text-base font-semibold">Cash or online</h2>
+              <SplitBar
+                format={rs}
+                parts={[
+                  { label: "Cash", value: data.totals.cash },
+                  { label: "Online", value: data.totals.online },
+                ]}
+              />
+            </div>
+            {data.accounts.length > 0 && (
+              <div>
+                <h2 className="text-base font-semibold">Online money went to</h2>
+                <p className="mb-3 text-sm text-ink-soft">Each account and how much it received.</p>
+                <SplitBar
+                  format={rs}
+                  parts={data.accounts.map((a, idx) => ({
+                    label: a.accountId ? `${a.label}${a.provider ? ` (${a.provider})` : ""}` : "Not recorded",
+                    value: a.total,
+                    color: a.accountId ? ["var(--series-1)", "var(--series-2)", "var(--series-3)"][idx] ?? "var(--series-muted)" : "var(--series-muted)",
+                  }))}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      <Section
+        title={single ? "Every sale" : "Day by day"}
+        description={single ? "Tap a sale to see what was in it." : "Open a day to see its sales."}
+        action={
+          <span className="text-xs text-ink-faint">{activeFilters ? `${activeFilters} filter${activeFilters > 1 ? "s" : ""} on` : ""}</span>
+        }
+      >
+        <Disclosure summary={activeFilters ? `Filters (${activeFilters} on)` : "Filter by payment, cashier or voided"}>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Select value={method} onChange={(e) => setMethod(e.target.value)} aria-label="Payment">
+              <option value="">Cash and online</option>
+              <option value="cash">Cash only</option>
+              <option value="online">Online only</option>
+            </Select>
+            <Select value={userId} onChange={(e) => setUserId(e.target.value)} aria-label="Cashier">
+              <option value="">Every cashier</option>
+              {data?.cashiers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+            <Select value={voided} onChange={(e) => setVoided(e.target.value)} aria-label="Voided">
+              <option value="">Include voided</option>
+              <option value="0">Hide voided</option>
+              <option value="1">Voided only</option>
+            </Select>
+          </div>
+        </Disclosure>
+
+        {error && !data && <EmptyState title="Couldn't load sales" description={error} />}
+        {data && !data.days.length && <EmptyState title="No sales in this period" description="Pick another day or period above." />}
+
+        {single ? (
+          <SaleList sales={data?.sales ?? []} onVoid={setVoiding} />
+        ) : (
+          <DayList days={data?.days ?? []} version={version} filters={filters.toString()} onVoid={setVoiding} />
+        )}
+      </Section>
 
       <VoidModal
         sale={voiding}
@@ -122,30 +174,48 @@ export default function SalesPage() {
   );
 }
 
-/** Where the online money went. Sales from before accounts were tracked show as "Not recorded". */
-function AccountsCard({ accounts }: { accounts: Data["accounts"] }) {
+/** Per hour for one day (from the sales themselves), per day for a longer period. */
+function SalesChart({ data, single }: { data: Data; single: boolean }) {
+  const points = useMemo<Datum[]>(() => {
+    if (!single) {
+      return data.days
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((d) => ({ label: d.date.slice(8), hint: fmtDate(d.date), values: { total: d.total } }));
+    }
+    const byHour = new Map<number, number>();
+    for (const s of data.sales ?? []) {
+      if (s.voided) continue;
+      const h = Number(pkTime(s.createdAt).slice(0, 2));
+      byHour.set(h, (byHour.get(h) ?? 0) + s.total);
+    }
+    const hours = [...byHour.keys()];
+    const from = Math.min(9, ...hours);
+    const to = Math.max(17, ...hours);
+    return Array.from({ length: to - from + 1 }, (_, i) => {
+      const h = from + i;
+      return { label: fmtClock(`${String(h).padStart(2, "0")}:00`).replace(":00", ""), hint: `${fmtClock(`${String(h).padStart(2, "0")}:00`)} – ${fmtClock(`${String(h + 1).padStart(2, "0")}:00`)}`, values: { total: byHour.get(h) ?? 0 } };
+    });
+  }, [data, single]);
+  return <ColumnChart data={points} series={[{ key: "total", label: "Sold" }]} format={rs} toAxis={(v) => v / 100} />;
+}
+
+const SHOW_DAYS = 7;
+
+function DayList({ days, version, filters, onVoid }: { days: Data["days"]; version: number; filters: string; onVoid: (s: Sale) => void }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? days : days.slice(0, SHOW_DAYS);
   return (
-    <Card className="mb-4 p-4">
-      <h2 className="mb-2 text-sm font-semibold">Online money by account</h2>
-      <ul className="divide-y divide-line text-sm">
-        {accounts.map((a) => (
-          <li key={a.accountId ?? "none"} className="flex items-center justify-between gap-4 py-1.5">
-            <span className={cx(!a.accountId && "text-muted-foreground")}>
-              {a.accountId ? (
-                <>
-                  {a.label}
-                  {a.provider && <span className="text-ink-faint"> · {a.provider}</span>}
-                </>
-              ) : (
-                "Not recorded"
-              )}
-              <span className="ml-2 text-xs text-ink-faint">{a.count} sales</span>
-            </span>
-            <span className="shrink-0 font-medium tabular-nums">{rs(a.total)}</span>
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <div className="space-y-2">
+      {shown.map((d) => (
+        <DayGroup key={`${d.date}-${version}`} day={d} filters={filters} onVoid={onVoid} />
+      ))}
+      {days.length > SHOW_DAYS && (
+        <button onClick={() => setAll(!all)} className="w-full rounded-xl py-2.5 text-sm font-medium text-primary hover:bg-muted">
+          {all ? "Show fewer days" : `Show all ${days.length} days`}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -153,20 +223,23 @@ function AccountsCard({ accounts }: { accounts: Data["accounts"] }) {
 function DayGroup({ day, filters, onVoid }: { day: Data["days"][number]; filters: string; onVoid: (s: Sale) => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card className="overflow-hidden">
-      <button className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={() => setOpen(!open)}>
-        <span className={cx("text-ink-faint transition-transform", open && "rotate-90")}>›</span>
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <button className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-muted/50" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <ChevronRightIcon className={cx("size-4 shrink-0 text-ink-faint transition-transform", open && "rotate-90")} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">{fmtDate(day.date)}</div>
-          <div className="mt-0.5 text-xs text-ink-faint tabular-nums">
-            {day.count} sales · cash {rs(day.cash)} · online {rs(day.online)}
-            {day.voids > 0 && ` · ${day.voids} voided`}
+          <div className="font-medium">{fmtDate(day.date)}</div>
+          <div className="mt-0.5 text-xs text-ink-soft tabular-nums">
+            {day.count} sales{day.voids > 0 && ` · ${day.voids} voided`}
           </div>
         </div>
-        <div className="text-sm font-semibold tabular-nums">{rs(day.total)}</div>
+        <div className="hidden text-right text-xs text-ink-soft tabular-nums sm:block">
+          <div>Cash {rs(day.cash)}</div>
+          <div>Online {rs(day.online)}</div>
+        </div>
+        <div className="w-24 text-right text-base font-semibold tabular-nums">{rs(day.total)}</div>
       </button>
       {open && <DaySales date={day.date} filters={filters} onVoid={onVoid} />}
-    </Card>
+    </div>
   );
 }
 
@@ -174,85 +247,120 @@ function DaySales({ date, filters, onVoid }: { date: string; filters: string; on
   const { data, error } = useApi<Data>(`/api/sales?date=${date}&${filters}`);
   return (
     <div className="border-t border-line bg-muted/30 p-2">
-      {!data ? error ? <Empty>{error}</Empty> : <div className="grid place-items-center py-4"><Spinner /></div> : <SaleList sales={data.sales ?? []} onVoid={onVoid} />}
+      {!data ? (
+        error ? (
+          <p className="p-4 text-sm text-ink-soft">{error}</p>
+        ) : (
+          <div className="grid place-items-center py-4">
+            <Spinner />
+          </div>
+        )
+      ) : (
+        <SaleList sales={data.sales ?? []} onVoid={onVoid} />
+      )}
     </div>
   );
 }
+
+const SHOW = 12;
 
 function SaleList({ sales, onVoid }: { sales: Sale[]; onVoid: (s: Sale) => void }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  const shown = all ? sales : sales.slice(0, SHOW);
   return (
-    <div className="space-y-2">
-      {sales.map((s) => (
-        <SaleCard key={s.id} sale={s} expanded={open === s.id} onToggle={() => setOpen(open === s.id ? null : s.id)} onVoid={onVoid} />
+    <div className="space-y-1.5">
+      {shown.map((s) => (
+        <SaleRow key={s.id} sale={s} expanded={open === s.id} onToggle={() => setOpen(open === s.id ? null : s.id)} onVoid={onVoid} />
       ))}
+      {sales.length > SHOW && (
+        <button onClick={() => setAll(!all)} className="w-full rounded-xl py-2.5 text-sm font-medium text-primary hover:bg-muted">
+          {all ? "Show fewer" : `Show all ${sales.length} sales`}
+        </button>
+      )}
     </div>
   );
 }
 
-function SaleCard({ sale: s, expanded, onToggle, onVoid }: { sale: Sale; expanded: boolean; onToggle: () => void; onVoid: (s: Sale) => void }) {
+function Method({ sale: s }: { sale: Sale }) {
+  const PayIcon = s.method === "cash" ? BanknoteIcon : SmartphoneIcon;
   return (
-    <Card className={cx("overflow-hidden", s.voided && "opacity-60")}>
-      <button className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50" onClick={onToggle}>
-        <div className="w-14 shrink-0 text-sm tabular-nums text-ink-soft">{pkTime(s.createdAt)}</div>
-        <div className="min-w-0 flex-1">
-          <div className={cx("truncate text-sm font-medium", s.voided && "line-through")}>
-            {s.lines.map((l) => `${l.qty}× ${l.name}`).join(", ")}
+    <span className="inline-flex items-center gap-1">
+      <PayIcon className="size-3.5" />
+      {s.method === "cash" ? "Cash" : s.account ? `Online · ${s.account}` : "Online"}
+    </span>
+  );
+}
+
+function SaleRow({ sale: s, expanded, onToggle, onVoid }: { sale: Sale; expanded: boolean; onToggle: () => void; onVoid: (s: Sale) => void }) {
+  const units = s.lines.reduce((n, l) => n + l.qty, 0);
+  return (
+    <div className={cx("rounded-xl border border-line bg-surface", s.voided && "bg-muted/40")}>
+      <div className="flex items-center gap-2 pr-2">
+        <button className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left" onClick={onToggle} aria-expanded={expanded}>
+          <div className="w-16 shrink-0 text-sm tabular-nums text-ink-soft">{fmtClock(pkTime(s.createdAt))}</div>
+          <div className="min-w-0 flex-1">
+            <div className={cx("truncate text-sm font-medium", s.voided && "text-ink-soft line-through")}>
+              {s.lines.length === 1 ? `${s.lines[0].qty}× ${s.lines[0].name}` : `${s.lines[0].name} + ${units - s.lines[0].qty} more`}
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-soft">
+              <Method sale={s} />
+              <span>· {s.cashier}</span>
+              {s.preorderId && <Badge>Pre-order</Badge>}
+              {s.oversold && <Badge tone="warn">Oversold</Badge>}
+              {s.voided && <Badge tone="bad">Voided</Badge>}
+            </div>
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
-            {s.cashier}
-            <Badge tone={s.method === "cash" ? "neutral" : "accent"}>{s.method === "cash" ? "Cash" : "Online"}</Badge>
-            {s.method === "online" && s.account && <span>to {s.account}</span>}
-            {s.preorderId && <Badge tone="accent">Pre-order</Badge>}
-            {s.oversold && <Badge tone="warn">Oversold</Badge>}
-            {s.voided && <Badge tone="bad">Voided</Badge>}
-          </div>
-        </div>
-        <div className={cx("text-sm font-semibold tabular-nums", s.voided && "line-through")}>{rs(s.total)}</div>
-      </button>
+          <div className={cx("shrink-0 text-base font-semibold tabular-nums", s.voided && "text-ink-faint line-through")}>{rs(s.total)}</div>
+        </button>
+        {!s.voided && (
+          <DropdownMenu>
+            <DropdownMenuTrigger className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-faint hover:bg-muted hover:text-ink" aria-label="Sale actions">
+              <MoreHorizontalIcon className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onToggle}>{expanded ? "Hide details" : "See details"}</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={() => onVoid(s)}>
+                Void sale…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
 
       {expanded && (
-        <div className="border-t border-line bg-muted/30 px-4 py-3 text-sm">
-          <table className="w-full">
-            <tbody>
-              {s.lines.map((l, i) => (
-                <tr key={i}>
-                  <td className="py-0.5">
-                    {l.qty}× {l.name}
-                    {l.oversold > 0 && <span className="ml-1.5 text-xs text-warn">{l.oversold} oversold</span>}
-                  </td>
-                  <td className="py-0.5 text-right tabular-nums text-ink-soft">{rs(l.unitPrice)} each</td>
-                  <td className="w-24 py-0.5 text-right tabular-nums">{rs(l.qty * l.unitPrice)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3 border-t border-line px-4 py-3 text-sm">
+          <ul className="space-y-1">
+            {s.lines.map((l, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3">
+                <span>
+                  {l.qty}× {l.name}
+                  <span className="ml-1.5 text-xs text-ink-faint">{rs(l.unitPrice)} each</span>
+                  {l.oversold > 0 && <span className="ml-1.5 text-xs text-warn">{l.oversold} sold while out of stock</span>}
+                </span>
+                <span className="tabular-nums">{rs(l.qty * l.unitPrice)}</span>
+              </li>
+            ))}
+          </ul>
           {s.method === "cash" && s.cashReceived !== null && (
-            <div className="mt-2 flex justify-end gap-4 text-xs text-ink-soft">
-              <span>Received {rs(s.cashReceived)}</span>
-              <span>Change {rs(s.change)}</span>
-            </div>
+            <p className="text-xs text-ink-soft">
+              Customer gave {rs(s.cashReceived)}, got {rs(s.change)} back.
+            </p>
           )}
           {s.method === "online" && (
-            <div className="mt-2 flex justify-end text-xs text-ink-soft">
-              {s.account ? `Paid to ${s.account}${s.accountProvider ? ` (${s.accountProvider})` : ""}` : "Receiving account not recorded"}
-            </div>
+            <p className="text-xs text-ink-soft">
+              {s.account ? `Paid to ${s.account}${s.accountProvider ? ` (${s.accountProvider})` : ""}.` : "Receiving account not recorded."}
+            </p>
           )}
-          {s.voided ? (
-            <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {s.voided && (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
               Voided by {s.voidedBy ?? "someone"}
               {s.voidedAt && ` on ${fmtDateTime(s.voidedAt)}`}: {s.voidReason}
-            </div>
-          ) : (
-            <div className="mt-3 flex justify-end">
-              <Button size="sm" variant="danger" onClick={() => onVoid(s)}>
-                <Icon name="x" /> Void sale
-              </Button>
-            </div>
+            </p>
           )}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 

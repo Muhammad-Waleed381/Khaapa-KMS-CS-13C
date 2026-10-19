@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { getDb, t } from "@/db";
 import { route } from "@/lib/server/api";
@@ -22,7 +22,8 @@ export const GET = route(async (req) => {
       lines: t.preorders.lines,
       total: t.preorders.total,
       status: t.preorders.status,
-      paymentRef: t.preorders.paymentRef,
+      // Whether the payment screenshot has been sent (the image itself stays private).
+      paymentSent: sql<boolean>`${isNotNull(t.preorders.proof)}`,
       createdAt: t.preorders.createdAt,
       accountId: t.paymentAccounts.id,
       accountLabel: t.paymentAccounts.label,

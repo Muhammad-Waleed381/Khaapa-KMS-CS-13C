@@ -7,16 +7,13 @@ const MAX_PROOF_CHARS = 410_000; // ~300 KB of JPEG as base64
 
 const Body = z.object({
   code: z.string().trim().toUpperCase(),
-  paymentRef: z.string().trim().min(3).max(80),
-  proof: z
-    .string()
-    .startsWith("data:image/")
-    .max(MAX_PROOF_CHARS, "screenshot is too large")
-    .optional(),
+  proof: z.string().startsWith("data:image/", "attach a screenshot of the payment").max(MAX_PROOF_CHARS, "screenshot is too large"),
+  // Older clients still send a transaction reference; it's optional now.
+  paymentRef: z.string().trim().max(80).optional(),
 });
 
-// The customer sends their online payment transaction reference (and optionally a
-// screenshot) for the advance payment. Staff verify it on /orders.
+// The customer attaches a screenshot of their advance payment. Staff check it
+// on /orders.
 export const POST = route<{ id: string }>(async (req, { params }) => {
   const { id } = await params;
   const b = await parseBody(req, Body);
@@ -26,8 +23,8 @@ export const POST = route<{ id: string }>(async (req, { params }) => {
   if (order.status !== "awaiting_payment") throw new HttpError(400, "This order's payment is already handled");
   await db
     .update(t.preorders)
-    .set({ paymentRef: b.paymentRef, proof: b.proof ?? order.proof })
+    .set({ proof: b.proof, paymentRef: b.paymentRef || order.paymentRef })
     .where(eq(t.preorders.id, id));
-  await logActivity(db, null, "preorder", `Payment proof sent for pre-order ${order.code} (ref ${b.paymentRef})`, id);
+  await logActivity(db, null, "preorder", `Payment screenshot sent for pre-order ${order.code}`, id);
   return { ok: true };
 });
