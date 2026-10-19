@@ -5,14 +5,14 @@ import { PublicHeader } from "@/components/public/header";
 import { ItemThumb } from "@/components/public/item-thumb";
 import { PaymentStep } from "@/components/public/payment-step";
 import { MyOrders, rememberOrder } from "@/components/public/my-orders";
-import type { PublicItem, ShopInfo } from "@/components/public/types";
+import type { PaymentAccount, PublicItem, ShopInfo } from "@/components/public/types";
 import { toast } from "@/components/toast";
 import { Button, Card, cx, Empty, Field, Input, Spinner, Textarea } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { rs } from "@/lib/money";
 import { fmtClock, fmtDate } from "@/lib/time";
 
-type Placed = { id: string; code: string; total: number };
+type Placed = { id: string; code: string; total: number; account: PaymentAccount | null };
 
 export default function PreorderPage() {
   const { data: info } = useApi<ShopInfo>("/api/public/info");
@@ -89,12 +89,12 @@ export default function PreorderPage() {
       <div className="mx-auto max-w-2xl px-4 pt-6">
         <h1 className="text-2xl font-bold tracking-tight">Pre-order</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Order for today or tomorrow, pay in advance on NayaPay, and pick it up at {info?.shop.location.label ?? "SEECS"}.
+          Order for today or tomorrow, pay in advance online, and pick it up at {info?.shop.location.label ?? "SEECS"}.
         </p>
 
         {placed ? (
           <div className="mt-6">
-            <PaymentStep order={placed} shop={info?.shop} onDone={onPaid} />
+            <PaymentStep order={placed} account={placed.account ?? info?.account} onDone={onPaid} />
           </div>
         ) : (
           <>
@@ -199,7 +199,7 @@ export default function PreorderPage() {
           </>
         )}
 
-        <MyOrders refreshKey={ordersKey} shop={info?.shop} />
+        <MyOrders refreshKey={ordersKey} account={info?.account} />
       </div>
 
       {!placed && lines.length > 0 && (

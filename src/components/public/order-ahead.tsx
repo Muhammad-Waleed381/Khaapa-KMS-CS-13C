@@ -23,7 +23,7 @@ function Fragment({ children }: { children: ReactNode }) {
 export function OrderAhead({ info, items }: { info?: ShopInfo; items: PublicItem[] }) {
   const [progress, setProgress] = useState(0);
   const days = info?.days ?? [];
-  const np = info?.shop.nayapay;
+  const account = info?.account;
   const sample = items.filter((i) => i.preorder && i.availability !== "out").slice(0, 3);
   const sampleTotal = sample.reduce((s, i) => s + i.price, 0);
 
@@ -70,15 +70,15 @@ export function OrderAhead({ info, items }: { info?: ShopInfo; items: PublicItem
       ),
     },
     {
-      title: "Pay on NayaPay",
+      title: "Pay online",
       body: "Send the total, then paste the transaction ID.",
       gap: "h-20 md:h-24",
       ui: (
         <Fragment>
           <div className="text-sm text-(--pub-paper-soft)">Pay to</div>
-          <div className="font-semibold">{np?.name || "Khaapa SEECS"}</div>
-          <div className="text-sm text-(--pub-paper-soft)">NayaPay</div>
-          <div className="font-semibold">{np?.handle || "Shown after you order"}</div>
+          <div className="font-semibold">{account?.accountTitle || "Khaapa SEECS"}</div>
+          <div className="text-sm text-(--pub-paper-soft)">{account?.provider ?? "Account"}</div>
+          <div className="font-semibold">{account?.accountNumber || "Shown after you order"}</div>
           {sampleTotal > 0 && (
             <>
               <div className="text-sm text-(--pub-paper-soft)">Amount</div>

@@ -15,11 +15,19 @@ export type DayStatus = { date: string; open: boolean; cutoff: string; note: str
 export type ShopSettings = {
   location: { lat: number; lng: number; label: string };
   hours: string;
-  nayapay: { name: string; handle: string; instructions: string };
   whatsapp: string;
 };
 
-export type ShopInfo = { shop: ShopSettings; days: DayStatus[] };
+/** A payment account as customers see it (see /api/accounts). */
+export type PaymentAccount = {
+  id: string;
+  label: string;
+  provider: string;
+  accountTitle: string;
+  accountNumber: string;
+};
+
+export type ShopInfo = { shop: ShopSettings; days: DayStatus[]; account: PaymentAccount | null };
 
 export type PreorderStatus = "awaiting_payment" | "paid" | "ready" | "collected" | "cancelled";
 

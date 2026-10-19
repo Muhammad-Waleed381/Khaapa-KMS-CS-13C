@@ -6,22 +6,30 @@ import { Button, Card, Field, Input } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import { rs } from "@/lib/money";
 import { compressImage } from "./compress";
-import type { ShopSettings } from "./types";
+import type { PaymentAccount } from "./types";
 
-/** Pay the advance on NayaPay, then send the transaction reference (+ screenshot). */
+/** Pay the advance online into the order's account, then send the transaction reference (+ screenshot). */
 export function PaymentStep({
   order,
-  shop,
+  account,
   onDone,
 }: {
   order: { id: string; code: string; total: number };
-  shop?: ShopSettings;
+  account?: PaymentAccount | null;
   onDone: () => void;
 }) {
   const [ref, setRef] = useState("");
   const [proof, setProof] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const np = shop?.nayapay;
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Account number copied");
+    } catch {
+      toast("Couldn't copy, select it instead", "bad");
+    }
+  }
 
   async function pick(file?: File) {
     if (!file) return;
@@ -61,30 +69,35 @@ export function PaymentStep({
       </div>
 
       <div className="mt-5 rounded-lg bg-muted p-4 text-sm">
-        <div className="font-semibold">Pay in advance on NayaPay</div>
-        {np?.handle ? (
-          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            {np.name && (
-              <>
-                <dt className="text-ink-soft">Account</dt>
-                <dd className="font-medium">{np.name}</dd>
-              </>
-            )}
-            <dt className="text-ink-soft">NayaPay</dt>
-            <dd className="font-mono font-medium select-all">{np.handle}</dd>
+        <div className="font-semibold">Pay in advance online</div>
+        {account ? (
+          <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1">
+            <dt className="text-ink-soft">Pay with</dt>
+            <dd className="font-medium">{account.provider}</dd>
+            <dt className="text-ink-soft">Account title</dt>
+            <dd className="font-medium">{account.accountTitle}</dd>
+            <dt className="text-ink-soft">Account no.</dt>
+            <dd className="flex items-center gap-2">
+              <span className="font-mono font-medium select-all">{account.accountNumber}</span>
+              <button
+                type="button"
+                onClick={() => copy(account.accountNumber)}
+                className="rounded px-1.5 py-0.5 text-xs font-medium text-ink-soft hover:bg-surface hover:text-ink"
+              >
+                Copy
+              </button>
+            </dd>
             <dt className="text-ink-soft">Amount</dt>
             <dd className="font-medium">{rs(order.total)}</dd>
           </dl>
         ) : (
-          <p className="mt-1 text-ink-soft">Ask the shop for the NayaPay account to pay to.</p>
+          <p className="mt-1 text-ink-soft">Ask the shop which account to pay into.</p>
         )}
-        <p className="mt-2 text-ink-soft">
-          {np?.instructions || `Put your order code ${order.code} in the payment note.`}
-        </p>
+        <p className="mt-2 text-ink-soft">Put your order code {order.code} in the payment note.</p>
       </div>
 
       <div className="mt-5 space-y-3">
-        <Field label="Transaction ID / reference" hint="From the NayaPay receipt after you pay.">
+        <Field label="Transaction ID / reference" hint="From the payment receipt after you pay.">
           <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. 1234567890" />
         </Field>
         <Field label="Screenshot (optional)">

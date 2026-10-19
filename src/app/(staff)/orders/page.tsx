@@ -20,6 +20,8 @@ type Order = {
   status: PreorderStatus;
   paymentRef: string | null;
   hasProof: boolean;
+  /** "Shop main (NayaPay ••1234)": where the customer was asked to pay. */
+  account: string | null;
   createdAt: string;
 };
 
@@ -151,9 +153,14 @@ export default function OrdersPage() {
               {o.note && <p className="mt-2 rounded-md bg-muted px-2 py-1 text-xs text-ink-soft">“{o.note}”</p>}
 
               <div className="mt-3 text-xs text-ink-soft">
+                {o.account && (
+                  <div className="mb-1">
+                    Pay to <span className="font-medium text-ink">{o.account}</span>
+                  </div>
+                )}
                 {o.paymentRef ? (
                   <>
-                    NayaPay ref <span className="font-mono font-medium text-ink select-all">{o.paymentRef}</span>
+                    Payment ref <span className="font-mono font-medium text-ink select-all">{o.paymentRef}</span>
                     {o.hasProof && (
                       <button onClick={() => setProofOf(o)} className="ml-2 text-primary hover:underline">
                         View screenshot

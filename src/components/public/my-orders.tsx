@@ -6,7 +6,7 @@ import { api } from "@/lib/client/api";
 import { rs } from "@/lib/money";
 import { fmtDate } from "@/lib/time";
 import { PaymentStep } from "./payment-step";
-import { STATUS_LABEL, STATUS_TONE, type PreorderLine, type PreorderStatus, type ShopSettings } from "./types";
+import { STATUS_LABEL, STATUS_TONE, type PaymentAccount, type PreorderLine, type PreorderStatus } from "./types";
 
 const KEY = "khaapa:my-preorders";
 
@@ -19,6 +19,7 @@ type Order = {
   total: number;
   status: PreorderStatus;
   paymentRef: string | null;
+  account: PaymentAccount | null;
 };
 
 function readSaved(): Saved[] {
@@ -36,7 +37,7 @@ export function rememberOrder(o: Saved) {
 }
 
 /** The customer's own orders on this device, refreshed every 30 s. */
-export function MyOrders({ refreshKey, shop }: { refreshKey: number; shop?: ShopSettings }) {
+export function MyOrders({ refreshKey, account }: { refreshKey: number; account?: PaymentAccount | null }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [paying, setPaying] = useState<Order | null>(null);
 
@@ -92,7 +93,7 @@ export function MyOrders({ refreshKey, shop }: { refreshKey: number; shop?: Shop
         {paying && (
           <PaymentStep
             order={paying}
-            shop={shop}
+            account={paying.account ?? account}
             onDone={() => {
               setPaying(null);
               load();

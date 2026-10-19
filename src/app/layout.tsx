@@ -18,7 +18,7 @@ const text = Arimo({
 export const metadata: Metadata = {
   title: { default: "Khaapa SEECS", template: "%s · Khaapa SEECS" },
   description:
-    "Khaapa SEECS is the student-run tuck shop at NUST SEECS. Live rate list and stock, and pre-orders for today or tomorrow paid on NayaPay.",
+    "Khaapa SEECS is the student-run tuck shop at NUST SEECS. Live rate list and stock, and pre-orders for today or tomorrow paid online.",
   applicationName: "Khaapa SEECS",
 };
 

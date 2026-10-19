@@ -10,24 +10,23 @@ import { addDays, pkDate, pkTime } from "@/lib/time";
 export type ShopSettings = {
   location: { lat: number; lng: number; label: string };
   hours: string;
-  nayapay: { name: string; handle: string; instructions: string };
   whatsapp: string;
 };
 
 export const DEFAULT_SHOP: ShopSettings = {
   location: { lat: 33.64314917030392, lng: 72.99074742883603, label: "SEECS, NUST H-12" },
   hours: "",
-  nayapay: { name: "", handle: "", instructions: "" },
   whatsapp: "",
 };
 
 export async function getShop(): Promise<ShopSettings> {
+  // Older saves also hold a "nayapay" block; payment details now live in
+  // payment accounts, so it's dropped here.
   const s = await getSetting<Partial<ShopSettings>>("shop", {});
   return {
-    ...DEFAULT_SHOP,
-    ...s,
     location: { ...DEFAULT_SHOP.location, ...s.location },
-    nayapay: { ...DEFAULT_SHOP.nayapay, ...s.nayapay },
+    hours: s.hours ?? DEFAULT_SHOP.hours,
+    whatsapp: s.whatsapp ?? DEFAULT_SHOP.whatsapp,
   };
 }
 

@@ -15,7 +15,7 @@ const Body = z.object({
     .optional(),
 });
 
-// The customer sends their NayaPay transaction reference (and optionally a
+// The customer sends their online payment transaction reference (and optionally a
 // screenshot) for the advance payment. Staff verify it on /orders.
 export const POST = route<{ id: string }>(async (req, { params }) => {
   const { id } = await params;

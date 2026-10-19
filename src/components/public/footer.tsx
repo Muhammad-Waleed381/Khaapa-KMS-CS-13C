@@ -23,7 +23,7 @@ export function PublicFooter({ shop }: { shop?: ShopSettings }) {
             <p className="font-display text-[2rem] leading-[1.05] md:text-[2.5rem]">See you at the counter</p>
             <div className="mt-4 space-y-1">
               {hours.length ? hours.map((h) => <p key={h}>{h}</p>) : <p>Opening hours are posted at the counter.</p>}
-              <p className="text-(--pub-paper-soft)">Cash or NayaPay.</p>
+              <p className="text-(--pub-paper-soft)">Cash or online.</p>
             </div>
           </div>
           <ul className="space-y-3 text-[1.0625rem] md:pt-28 md:text-lg">

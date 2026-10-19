@@ -25,8 +25,12 @@ export const GET = route(async (req) => {
       hasProof: sql<boolean>`${isNotNull(t.preorders.proof)}`,
       saleId: t.preorders.saleId,
       createdAt: t.preorders.createdAt,
+      // The account the customer was asked to pay into.
+      account: sql<string | null>`case when ${t.paymentAccounts.id} is null then null else
+        ${t.paymentAccounts.label} || ' (' || ${t.paymentAccounts.provider} || ' ••' || right(regexp_replace(${t.paymentAccounts.accountNumber}, '[[:space:]]', '', 'g'), 4) || ')' end`,
     })
     .from(t.preorders)
+    .leftJoin(t.paymentAccounts, eq(t.paymentAccounts.id, t.preorders.accountId))
     .where(eq(t.preorders.pickupDate, date))
     .orderBy(asc(t.preorders.createdAt));
   return { orders };

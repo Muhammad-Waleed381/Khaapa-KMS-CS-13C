@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb, t } from "@/db";
 import { HttpError, logActivity, parseBody, route } from "@/lib/server/api";
 import { rs } from "@/lib/money";
+import { currentAccount, toPublic } from "../../accounts/_accounts";
 import { availableStock, newCode, preorderDays, preorderWindow } from "../_shop";
 
 const Body = z.object({
@@ -51,6 +52,9 @@ export const POST = route(async (req) => {
       return { itemId, name: item.name, qty, unitPrice: item.price };
     });
     const total = lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+    // The customer pays into whichever account is receiving online payments now;
+    // the order remembers it even if the shop switches accounts later.
+    const account = await currentAccount(tx);
 
     for (let attempt = 0; ; attempt++) {
       const code = newCode();
@@ -66,10 +70,11 @@ export const POST = route(async (req) => {
           pickupDate: b.pickupDate,
           lines,
           total,
+          accountId: account?.id ?? null,
         })
         .returning({ id: t.preorders.id });
       await logActivity(tx, null, "preorder", `New pre-order ${code} from ${b.customerName} (${rs(total)})`, row.id);
-      return { id: row.id, code, total };
+      return { id: row.id, code, total, account: account ? toPublic(account) : null };
     }
   });
 });

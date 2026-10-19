@@ -58,6 +58,8 @@ export const POST = route<{ id: string }>(async (req, { params }) => {
         preorderId: order.id,
         lines: order.lines,
       });
+      // Paid in advance into the account the order was given.
+      if (order.accountId) await tx.update(t.sales).set({ accountId: order.accountId }).where(eq(t.sales.id, saleId));
     }
     await tx
       .update(t.preorders)
