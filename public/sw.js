@@ -1,13 +1,14 @@
 // Khaapa service worker: keeps the app shell and last-seen data available
 // offline. Writes never go through here; the POS queues them in IndexedDB.
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL = `khaapa-shell-${VERSION}`;
 const STATIC = `khaapa-static-${VERSION}`;
 const DATA = `khaapa-data-${VERSION}`;
 
 const SHELL_ROUTES = [
   "/",
+  "/home",
   "/pos",
   "/items",
   "/sales",
@@ -16,6 +17,7 @@ const SHELL_ROUTES = [
   "/shifts",
   "/report",
   "/stats",
+  "/shares",
   "/login",
   "/preorder",
 ];
