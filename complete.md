@@ -272,3 +272,35 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
   - Edge case: voiding an oversold sale whose units were already paid off by a restock puts those units back at the last unit cost, and the `settle` cost stays counted. This is acceptable at this scale.
 - **Oversell cost:** an oversold unit gets its cost when the next restock pays it off. Until then, profit for that period overstates slightly.
 - **No automated tests yet.** A good first addition would be unit tests for `src/lib/server/stock.ts` against PGlite.
+
+## 11. Round 2 (2026-10-20): accounts, share requests, reports, demo data
+
+**Decisions made in this round (don't re-ask):**
+- "NayaPay" is shown as **"Online"** everywhere. Admins manage **payment accounts** (label, provider, title, number, active; deactivate rather than delete).
+- The Counter has **one current receiving account**. A cashier changes it once and every later online sale uses it, with no prompt per sale. The change also works offline, as a `account_switch` op in the outbox.
+- Every online sale (`sales.account_id`) and every pre-order (`preorders.account_id`) records the account. Reports total online money per account.
+- **Share requests:** any approved account can request 1..cap shares, paying into the share account and attaching a screenshot. Admins approve or reject. The price is **locked at request time**, and approval creates a `shareholders` row with `user_id` and `purchase_id`. Profit is split **equally per share**. Share settings live in the setting key `shares`: `{pricePerShare, maxPerPerson, totalOnOffer, open, accountId}`.
+- **Schedule:** members see **only their own duties** and their availability. HR (admins) see the Timetable, Availability and Plan week.
+- **Landing page:** admins land on **Dashboard** (`/stats`) and everyone else on the Counter, via `/home`.
+- **Still to discuss with the user:** how "payment received" should work for pre-orders. They flagged it and deferred it.
+
+**New code:**
+- Schema migration `drizzle/0001_accounts_and_share_purchases.sql`.
+- APIs: `/api/accounts` (with `/current`), `/api/shares/{settings,mine}` and `/api/share-purchases/*`.
+- Sales and shifts take `?from=&to=` periods.
+- `POST /api/items` accepts `openingStock`, and `GET /api/items/[id]/moves` returns batches and price history.
+
+**Demo data:**
+- `npm run seed:demo` (`scripts/seed-demo.ts`, run directly by Node's type stripping) simulates 42 days with the same FIFO rules as the engine and bulk-inserts the result. It also creates payment accounts, a temporary switch to a backup account, and share requests across a price rise.
+- Demo staff use `@demo.khaapa.invalid` emails, which can't sign in.
+- `--wipe` empties every table; `--pglite <dir>` targets a local database.
+- `npm run seed:reference` only imports the menu and photos.
+
+**Testing without touching production:**
+- `.env.local` points at **production Neon**. To test against a local database, start a second dev server: `DATABASE_URL= NEXT_DIST_DIR=.next-test npx next dev -p 3100`. `distDir` is read from `NEXT_DIST_DIR` so it can run beside the user's own `npm run dev`.
+- The dev login admin email must be in `ADMIN_EMAILS`. The user changed it to their real accounts, so `admin.bscs23seecs@…` is no longer an admin.
+
+**Gotchas:**
+- Never call `getSetting`, `setSetting`, `getDb` or `getShop` **inside a transaction**. On PGlite's single connection it deadlocks the whole server; on Neon it silently reads outside the transaction. Read through the `tx` you're given.
+- `next build` logs "During prerendering, headers()/connection() rejects…" for cookie-reading API routes. This is harmless: they end up dynamic (ƒ) and the build exits 0.
+- The Dashboard's number tickers and fade-ins only animate once they're scrolled into view, so full-page headless screenshots show "Rs 0" and blank cards.
