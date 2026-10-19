@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
+import { compressImage } from "@/components/public/compress";
 import {
+  Badge,
   Button,
   Card,
   cx,
@@ -12,6 +14,7 @@ import {
   Input,
   Modal,
   PageHeader,
+  Select,
   Spinner,
   StaleNote,
   Stat,
@@ -20,7 +23,7 @@ import {
 import { api, useApi } from "@/lib/client/api";
 import { useMe } from "@/lib/client/me";
 import { rs, toPaisa, toRupees } from "@/lib/money";
-import { fmtDate, pkDate } from "@/lib/time";
+import { fmtDate, fmtDateTime, pkDate } from "@/lib/time";
 
 type Holder = {
   id: string;
@@ -30,6 +33,7 @@ type Holder = {
   pricePerShare: number;
   boughtOn: string;
   note: string | null;
+  fromRequest: boolean;
   ownership: number;
   invested: number;
   profitShare: number;
@@ -72,14 +76,456 @@ function periodLabel(p: Period) {
 
 export default function SharesPage() {
   const { isAdmin } = useMe();
+  const mine = useApi<Mine>("/api/shares/mine");
+  return (
+    <div className="mx-auto max-w-5xl">
+      <PageHeader
+        title="Shares"
+        sub={isAdmin ? "Who owns Khaapa, share sales, and what each shareholder gets back." : "Your shares in Khaapa, and buying more."}
+      />
+      <StaleNote stale={mine.stale} />
+      <MyShares mine={mine.data} error={mine.error} reload={mine.reload} />
+      {isAdmin && <AdminShares onChanged={mine.reload} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- everyone
+
+type Account = { id: string; label: string; provider: string; accountTitle: string; accountNumber: string };
+
+type Purchase = {
+  id: string;
+  shares: number;
+  pricePerShare: number;
+  total: number;
+  paymentRef: string | null;
+  hasProof: boolean;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  note: string | null;
+  createdAt: string;
+};
+
+type Mine = {
+  holdings: { id: string; shares: number; pricePerShare: number; boughtOn: string; fromRequest: boolean }[];
+  totals: { shares: number; invested: number; estimatedProfit: number; payout: number };
+  totalShares: number;
+  profitPerShare: number;
+  purchases: Purchase[];
+  offer: { open: boolean; pricePerShare: number; maxPerPerson: number; remaining: number; account: Account | null };
+};
+
+const STATUS_TONE = { pending: "warn", approved: "good", rejected: "bad", cancelled: "neutral" } as const;
+const STATUS_LABEL = { pending: "Waiting for approval", approved: "Approved", rejected: "Rejected", cancelled: "Cancelled" };
+
+function MyShares({ mine, error, reload }: { mine: Mine | undefined; error: string | null; reload: () => void }) {
+  const [proofOf, setProofOf] = useState<string | null>(null);
+  if (!mine) return <div className="grid place-items-center py-10">{error ? <Empty>{error}</Empty> : <Spinner />}</div>;
+
+  const cancel = async (p: Purchase) => {
+    if (!confirm(`Cancel your request for ${p.shares} share${p.shares > 1 ? "s" : ""}?`)) return;
+    try {
+      await api(`/api/share-purchases/${p.id}/cancel`, { method: "POST" });
+      toast("Request cancelled");
+      reload();
+    } catch (e) {
+      toast((e as Error).message, "bad");
+    }
+  };
+
+  return (
+    <section>
+      <h2 className="mb-2 text-base font-semibold">My shares</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Shares I own" value={mine.totals.shares} sub={`of ${mine.totalShares.toLocaleString()} in total`} />
+        <Stat label="I invested" value={rs(mine.totals.invested)} />
+        <Stat
+          label="My profit so far"
+          value={<span className={mine.totals.estimatedProfit < 0 ? "text-destructive" : ""}>{rs(mine.totals.estimatedProfit)}</span>}
+          sub={mine.totals.shares ? `${rs(mine.profitPerShare)} per share, all time` : "Buy shares to earn a part of the profit"}
+        />
+        <Stat label="I'd receive" value={rs(mine.totals.payout)} sub="Investment + profit, if paid out today" />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+        <BuyShares offer={mine.offer} onDone={reload} />
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold">My holdings</h3>
+          <p className="mt-0.5 text-xs text-ink-faint">Each purchase keeps the price it was bought at.</p>
+          {mine.holdings.length === 0 ? (
+            <p className="mt-3 text-sm text-ink-soft">You don&apos;t own any shares yet.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-line text-sm">
+              {mine.holdings.map((h) => (
+                <li key={h.id} className="flex items-baseline justify-between gap-3 py-2">
+                  <span>
+                    {h.shares} share{h.shares > 1 ? "s" : ""} at {rs(h.pricePerShare)}
+                    <span className="block text-xs text-ink-faint">Since {fmtDate(h.boughtOn)}</span>
+                  </span>
+                  <span className="tabular-nums">{rs(h.shares * h.pricePerShare)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      {mine.purchases.length > 0 && (
+        <Card className="mt-4">
+          <div className="border-b border-line px-4 py-2.5 text-sm font-semibold">My requests</div>
+          <ul>
+            {mine.purchases.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-2.5 text-sm last:border-0">
+                <div className="min-w-0 flex-1">
+                  <div>
+                    {p.shares} share{p.shares > 1 ? "s" : ""} at {rs(p.pricePerShare)} · <b>{rs(p.total)}</b>
+                  </div>
+                  <div className="text-xs text-ink-faint">
+                    {fmtDateTime(p.createdAt)}
+                    {p.paymentRef && ` · ref ${p.paymentRef}`}
+                    {p.note && ` · ${p.note}`}
+                  </div>
+                </div>
+                <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
+                {p.hasProof && (
+                  <Button size="sm" variant="ghost" onClick={() => setProofOf(p.id)}>
+                    Screenshot
+                  </Button>
+                )}
+                {p.status === "pending" && (
+                  <Button size="sm" variant="ghost" onClick={() => cancel(p)}>
+                    Cancel
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <ProofModal id={proofOf} onClose={() => setProofOf(null)} />
+    </section>
+  );
+}
+
+function BuyShares({ offer, onDone }: { offer: Mine["offer"]; onDone: () => void }) {
+  const [count, setCount] = useState(1);
+  const [ref, setRef] = useState("");
+  const [proof, setProof] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!offer.open)
+    return (
+      <Card className="p-4">
+        <h3 className="text-sm font-semibold">Buy shares</h3>
+        <p className="mt-2 text-sm text-ink-soft">Shares aren&apos;t on sale right now. Admins will open them when there&apos;s a new round.</p>
+      </Card>
+    );
+  if (offer.remaining <= 0)
+    return (
+      <Card className="p-4">
+        <h3 className="text-sm font-semibold">Buy shares</h3>
+        <p className="mt-2 text-sm text-ink-soft">
+          You&apos;ve reached the limit of {offer.maxPerPerson} share{offer.maxPerPerson > 1 ? "s" : ""} per person
+          (counting requests still waiting for approval).
+        </p>
+      </Card>
+    );
+
+  const n = Math.min(Math.max(1, count), offer.remaining);
+  const amount = n * offer.pricePerShare;
+  const a = offer.account;
+
+  const pickFile = async (file: File | undefined) => {
+    if (!file) return setProof(null);
+    try {
+      setProof(await compressImage(file));
+    } catch (e) {
+      toast((e as Error).message, "bad");
+    }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api("/api/share-purchases", { body: { shares: n, paymentRef: ref.trim(), proof } });
+      toast("Request sent. An admin will check your payment.");
+      setRef("");
+      setProof(null);
+      setCount(1);
+      onDone();
+    } catch (err) {
+      toast((err as Error).message, "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h3 className="text-sm font-semibold">Buy shares</h3>
+      <p className="mt-0.5 text-xs text-ink-faint">
+        {rs(offer.pricePerShare)} per share · you can buy {offer.remaining} more (limit {offer.maxPerPerson} per person)
+      </p>
+      <form onSubmit={submit} className="mt-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center rounded-md border border-line">
+            <button type="button" className="px-3 py-1.5 text-ink-soft hover:text-ink disabled:opacity-40" onClick={() => setCount(n - 1)} disabled={n <= 1} aria-label="Fewer">
+              <Icon name="minus" />
+            </button>
+            <span className="w-8 text-center font-semibold tabular-nums">{n}</span>
+            <button type="button" className="px-3 py-1.5 text-ink-soft hover:text-ink disabled:opacity-40" onClick={() => setCount(n + 1)} disabled={n >= offer.remaining} aria-label="More">
+              <Icon name="plus" />
+            </button>
+          </div>
+          <div className="text-sm">
+            share{n > 1 ? "s" : ""} · pay <b className="text-base tabular-nums">{rs(amount)}</b>
+          </div>
+        </div>
+
+        {a ? (
+          <div className="rounded-lg bg-muted p-3 text-sm">
+            <div className="text-xs text-ink-faint">Send {rs(amount)} to</div>
+            <div className="mt-1 font-medium">
+              {a.provider} · {a.accountTitle}
+            </div>
+            <div className="mt-0.5 flex items-center gap-2">
+              <span className="font-mono tabular-nums">{a.accountNumber}</span>
+              <button
+                type="button"
+                className="rounded p-1 text-ink-faint hover:bg-background hover:text-ink"
+                aria-label="Copy account number"
+                onClick={() =>
+                  navigator.clipboard.writeText(a.accountNumber).then(
+                    () => toast("Account number copied"),
+                    () => toast("Couldn't copy", "bad"),
+                  )
+                }
+              >
+                <Icon name="copy" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-destructive">No payment account is set yet. Ask an admin.</p>
+        )}
+
+        <Field label="Transaction ID" hint="From your payment app's receipt">
+          <Input value={ref} onChange={(e) => setRef(e.target.value)} required minLength={3} />
+        </Field>
+        <Field label="Payment screenshot" hint="Optional, but it speeds up approval">
+          <Input type="file" accept="image/*" onChange={(e) => pickFile(e.target.files?.[0])} />
+        </Field>
+        {proof && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={proof} alt="Payment screenshot" className="max-h-40 rounded-md border border-line" />
+        )}
+        <Button type="submit" variant="primary" className="w-full" disabled={busy || !a || ref.trim().length < 3}>
+          {busy ? "Sending…" : `I've paid ${rs(amount)}, send request`}
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+function ProofModal({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const proof = useApi<{ proof: string | null; paymentRef: string | null }>(id ? `/api/share-purchases/${id}/proof` : null);
+  return (
+    <Modal open={!!id} onClose={onClose} title="Payment screenshot">
+      {!proof.data ? (
+        <Spinner />
+      ) : (
+        <div className="space-y-2">
+          {proof.data.paymentRef && <div className="text-sm">Transaction ID: <b>{proof.data.paymentRef}</b></div>}
+          {proof.data.proof ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={proof.data.proof} alt="Payment screenshot" className="w-full rounded-md border border-line" />
+          ) : (
+            <p className="text-sm text-ink-soft">No screenshot was attached.</p>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------- admins
+
+type ShareSettings = { pricePerShare: number; maxPerPerson: number; totalOnOffer: number | null; open: boolean; accountId: string | null };
+
+function ShareSettingsCard({ onSaved }: { onSaved: () => void }) {
+  const st = useApi<{ settings: ShareSettings; accounts: (Account & { active: boolean })[] }>("/api/shares/settings");
+  if (!st.data) return <Card className="p-4">{st.error ? <Empty>{st.error}</Empty> : <Spinner />}</Card>;
+  return <ShareSettingsForm key={JSON.stringify(st.data.settings)} settings={st.data.settings} accounts={st.data.accounts} onSaved={() => { st.reload(); onSaved(); }} />;
+}
+
+function ShareSettingsForm({ settings, accounts, onSaved }: { settings: ShareSettings; accounts: Account[]; onSaved: () => void }) {
+  const [price, setPrice] = useState(String(toRupees(settings.pricePerShare)));
+  const [cap, setCap] = useState(String(settings.maxPerPerson));
+  const [total, setTotal] = useState(settings.totalOnOffer === null ? "" : String(settings.totalOnOffer));
+  const [open, setOpen] = useState(settings.open);
+  const [accountId, setAccountId] = useState(settings.accountId ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api("/api/shares/settings", {
+        body: {
+          pricePerShare: toPaisa(Number(price)),
+          maxPerPerson: Number(cap),
+          totalOnOffer: total.trim() === "" ? null : Number(total),
+          open,
+          accountId: accountId || null,
+        },
+      });
+      toast("Share settings saved");
+      onSaved();
+    } catch (err) {
+      toast((err as Error).message, "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Share sale settings</h3>
+          <p className="mt-0.5 text-xs text-ink-faint">A new price only applies to new requests; earlier ones keep their price.</p>
+        </div>
+        <Badge tone={settings.open ? "good" : "neutral"}>{settings.open ? "On sale" : "Closed"}</Badge>
+      </div>
+      <form onSubmit={save} className="mt-3 space-y-3">
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Price per share (Rs)">
+            <Input type="number" min={1} step="any" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required />
+          </Field>
+          <Field label="Max per person">
+            <Input type="number" min={1} step={1} inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value)} required />
+          </Field>
+          <Field label="Total on offer" hint="Empty = no limit">
+            <Input type="number" min={0} step={1} inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Buyers pay into" hint={accounts.length ? undefined : "Add a payment account in Settings first"}>
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">Choose an account…</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label} — {a.provider} · {a.accountTitle} · {a.accountNumber}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+          Shares are on sale (approved accounts can send requests)
+        </label>
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+type AdminPurchase = Purchase & { userId: string; name: string; email: string; accountLabel: string | null; accountProvider: string | null };
+
+function RequestsCard({ onDecided }: { onDecided: () => void }) {
+  const reqs = useApi<{ purchases: AdminPurchase[] }>("/api/share-purchases?all=1");
+  const [proofOf, setProofOf] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const list = reqs.data?.purchases ?? [];
+  const pending = list.filter((p) => p.status === "pending");
+  const shown = showAll ? list : pending;
+
+  const decide = async (p: AdminPurchase, status: "approved" | "rejected") => {
+    let note: string | null = null;
+    if (status === "rejected") {
+      note = prompt(`Why are you rejecting ${p.name}'s request? (shown to them)`);
+      if (note === null) return;
+    } else if (!confirm(`Approve ${p.shares} share${p.shares > 1 ? "s" : ""} for ${p.name} at ${rs(p.pricePerShare)} (${rs(p.total)})? Check the payment arrived first.`)) {
+      return;
+    }
+    try {
+      await api(`/api/share-purchases/${p.id}/decide`, { body: { status, note: note || null } });
+      toast(status === "approved" ? `${p.name} is now a shareholder` : "Request rejected");
+      reqs.reload();
+      onDecided();
+    } catch (e) {
+      toast((e as Error).message, "bad");
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+        <div className="text-sm font-semibold">
+          Share requests {pending.length > 0 && <Badge tone="warn">{pending.length} waiting</Badge>}
+        </div>
+        {list.length > pending.length && (
+          <Button size="sm" variant="ghost" onClick={() => setShowAll(!showAll)}>
+            {showAll ? "Waiting only" : "Show all"}
+          </Button>
+        )}
+      </div>
+      {!reqs.data ? (
+        <div className="p-4">{reqs.error ? <Empty>{reqs.error}</Empty> : <Spinner />}</div>
+      ) : shown.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-ink-faint">{showAll ? "No requests yet." : "No requests waiting."}</p>
+      ) : (
+        <ul>
+          {shown.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3 text-sm last:border-0">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{p.name}</div>
+                <div className="text-xs text-ink-faint">
+                  {p.shares} share{p.shares > 1 ? "s" : ""} at {rs(p.pricePerShare)} · <b className="text-ink">{rs(p.total)}</b>
+                  {p.accountLabel && ` · to ${p.accountLabel}`}
+                  {p.paymentRef && ` · ref ${p.paymentRef}`}
+                </div>
+                <div className="text-xs text-ink-faint">
+                  {fmtDateTime(p.createdAt)}
+                  {p.note && ` · ${p.note}`}
+                </div>
+              </div>
+              {p.status !== "pending" && <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>}
+              {p.hasProof && (
+                <Button size="sm" variant="ghost" onClick={() => setProofOf(p.id)}>
+                  Screenshot
+                </Button>
+              )}
+              {p.status === "pending" && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="danger" onClick={() => decide(p, "rejected")}>
+                    Reject
+                  </Button>
+                  <Button size="sm" variant="primary" onClick={() => decide(p, "approved")}>
+                    <Icon name="check" /> Approve
+                  </Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ProofModal id={proofOf} onClose={() => setProofOf(null)} />
+    </Card>
+  );
+}
+
+function AdminShares({ onChanged }: { onChanged: () => void }) {
   const [period, setPeriod] = useState<Period>({ kind: "all", from: "", to: "" });
   const qs = query(period);
-  const sum = useApi<SharesSummary>(isAdmin ? `/api/shares/summary${qs}` : null);
-  const costs = useApi<{ costs: Cost[] }>(isAdmin ? `/api/costs${qs}` : null);
+  const sum = useApi<SharesSummary>(`/api/shares/summary${qs}`);
+  const costs = useApi<{ costs: Cost[] }>(`/api/costs${qs}`);
   const [editing, setEditing] = useState<Holder | "new" | null>(null);
   const [addingCost, setAddingCost] = useState(false);
-
-  if (!isAdmin) return <Empty>Only admins can see shares.</Empty>;
 
   const reloadAll = () => {
     sum.reload();
@@ -89,17 +535,26 @@ export default function SharesPage() {
   const d = sum.data;
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title="Shares"
-        sub="Who owns Khaapa, and what each shareholder gets back."
-        actions={
-          <Button variant="primary" onClick={() => setEditing("new")}>
-            <Icon name="plus" /> Add shareholder
-          </Button>
-        }
-      />
-      <StaleNote stale={sum.stale} />
+    <div className="mt-10 border-t border-line pt-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">All shareholders</h2>
+          <p className="text-sm text-ink-soft">Admins only: share sales, the profit split and running costs.</p>
+        </div>
+        <Button variant="primary" onClick={() => setEditing("new")}>
+          <Icon name="plus" /> Add shareholder
+        </Button>
+      </div>
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <ShareSettingsCard onSaved={onChanged} />
+        <RequestsCard
+          onDecided={() => {
+            sum.reload();
+            onChanged();
+          }}
+        />
+      </div>
 
       <PeriodPicker period={period} onChange={setPeriod} />
 
@@ -120,7 +575,7 @@ export default function SharesPage() {
               value={d.totalShares ? rs(d.profitPerShare) : "—"}
               sub={`${d.totalShares.toLocaleString()} shares in total`}
             />
-            <Stat label="Total investment" value={rs(d.totalInvestment)} sub={`${d.shareholders.length} shareholders`} />
+            <Stat label="Total investment" value={rs(d.totalInvestment)} sub={`${d.shareholders.length} holdings`} />
             <Stat label="Stock on the shelf" value={rs(d.stockValue)} sub="At what we paid for it" />
           </div>
 
@@ -159,6 +614,7 @@ export default function SharesPage() {
         onSaved={() => {
           setEditing(null);
           sum.reload();
+          onChanged();
         }}
       />
       <CostModal
@@ -326,6 +782,7 @@ function Shareholders({
                     <div className="truncate font-medium">{h.name}</div>
                     <div className="text-xs text-ink-faint">
                       {h.shares} shares at {rs(h.pricePerShare)} · {pct(h.ownership)}
+                      {h.fromRequest && " · bought online"}
                     </div>
                   </div>
                   <button onClick={() => onEdit(h)} className="rounded-md p-1.5 text-ink-faint hover:bg-muted hover:text-ink" aria-label={`Edit ${h.name}`}>
@@ -359,7 +816,9 @@ function Shareholders({
                 {d.shareholders.map((h) => (
                   <tr key={h.id} className="border-b border-line last:border-0">
                     <td className="px-4 py-2.5">
-                      <div className="font-medium">{h.name}</div>
+                      <div className="font-medium">
+                        {h.name} {h.fromRequest && <Badge tone="accent">Bought online</Badge>}
+                      </div>
                       <div className="text-xs text-ink-faint">
                         {rs(h.pricePerShare)}/share · since {fmtDate(h.boughtOn)}
                       </div>

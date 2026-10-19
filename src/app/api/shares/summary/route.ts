@@ -40,6 +40,7 @@ export const GET = route(async (req) => {
       pricePerShare: h.pricePerShare,
       boughtOn: h.boughtOn,
       note: h.note,
+      fromRequest: !!h.purchaseId,
       ownership: totalShares ? h.shares / totalShares : 0,
       invested,
       profitShare,
