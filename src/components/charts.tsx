@@ -81,7 +81,7 @@ export function ColumnChart({
         {/* y axis */}
         <div className="relative w-9 shrink-0 text-right text-[11px] text-ink-faint tabular-nums" style={{ height }}>
           {ticks.map((t) => (
-            <span key={t} className="absolute right-0 -translate-y-1/2" style={{ bottom: `${(t / max) * 100}%` }}>
+            <span key={t} className="absolute right-0 translate-y-1/2" style={{ bottom: `${(t / max) * 100}%` }}>
               {compact(t)}
             </span>
           ))}
