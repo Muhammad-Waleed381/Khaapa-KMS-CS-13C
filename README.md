@@ -25,6 +25,17 @@ If `DATABASE_URL` is empty, the app uses an embedded PGlite database in `./.data
 
 To change the schema, edit `src/db/schema.ts`, then run `npm run db:generate` and commit the new file in `drizzle/`.
 
+### Sample data
+
+With the app running (`DEV_LOGIN=1`, your email in `ADMIN_EMAILS`), import the menu (names, categories, prices and photos) from the reference site:
+
+```bash
+npm run seed:reference                  # items and photos only
+npm run seed:reference -- --demo-stock  # also stock to test the counter (buy prices made up at 80% of price)
+```
+
+It is safe to re-run, because items that already exist are skipped. Leave out `--demo-stock` for real data.
+
 ## Deploy for free (Vercel + Neon)
 
 1. Push the repo to GitHub and import it in Vercel.
@@ -37,6 +48,21 @@ To change the schema, edit `src/db/schema.ts`, then run `npm run db:generate` an
    - `ADMIN_EMAILS`: comma-separated emails that are admins from their first sign-in
    - Optional: `ALLOWED_EMAIL_DOMAIN` (defaults to `seecs.edu.pk`)
 5. Deploy. Leave `DEV_LOGIN` unset in production.
+
+## Google sign-in setup
+
+Create the OAuth client in [Google Cloud Console](https://console.cloud.google.com/):
+
+1. **APIs & Services → OAuth consent screen**: choose User type **External**. Add the app name, a support email and the authorized domain of the deployment (e.g. `vercel.app` or your domain). Scopes: only `openid`, `email` and `profile`, which are the defaults.
+2. **Publishing status → Publish app ("In production")**. While the app is in *Testing*, only the people listed as test users (max 100) can sign in, and everyone else gets "Access blocked". The app only asks for basic profile scopes, so publishing needs **no Google verification**.
+3. **Credentials → Create OAuth client ID → Web application**, with these **Authorized redirect URIs**:
+   - `http://localhost:3000/api/auth/callback/google`
+   - `https://<your-vercel-domain>/api/auth/callback/google`
+4. Put the client ID and secret in `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
+
+Who can get in is decided by the app, not Google. The server rejects any email outside `@seecs.edu.pk` (`ALLOWED_EMAIL_DOMAIN`). New accounts wait for an admin to approve them on the Team page, and emails in `ADMIN_EMAILS` are admins from their first sign-in.
+
+**Check first:** `seecs.edu.pk` is a Google Workspace domain, and Workspace admins can block third-party apps. Sign in once with a SEECS account before rolling out. If you see "Access blocked: … has not been approved by your admin", ask SEECS IT to trust the OAuth client ID. Alternatively, create the Cloud project inside the SEECS Workspace organization and pick User type **Internal**.
 
 ## How it works
 
