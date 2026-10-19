@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme";
 import { Button, Card, Input } from "@/components/ui";
@@ -12,13 +13,20 @@ export default function LoginPage() {
   const [next, setNext] = useState("/home");
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     const q = new URLSearchParams(location.search);
+    const target = q.get("next")?.startsWith("/") ? q.get("next")! : "/home";
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (q.get("next")?.startsWith("/")) setNext(q.get("next")!);
+    setNext(target);
     if (q.get("error")) setError("Use your @seecs.edu.pk Google account to sign in.");
-  }, []);
+    // Already signed in (e.g. a new tab): go straight into the app.
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me) => me?.user && router.replace(target))
+      .catch(() => {});
+  }, [router]);
 
   return (
     <div className="relative grid min-h-dvh place-items-center p-4">

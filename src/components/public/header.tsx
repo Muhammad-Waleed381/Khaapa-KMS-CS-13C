@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme";
+import { StaffLink } from "@/components/staff-link";
 
 export function PublicHeader({ active }: { active?: "menu" | "preorder" }) {
   return (
@@ -19,9 +20,9 @@ export function PublicHeader({ active }: { active?: "menu" | "preorder" }) {
               Pre-order
             </Link>
           )}
-          <Link href="/login" className="rounded-md px-2.5 py-1.5 text-xs text-ink-faint hover:bg-muted hover:text-ink">
+          <StaffLink className="rounded-md px-2.5 py-1.5 text-xs text-ink-faint hover:bg-muted hover:text-ink">
             Staff
-          </Link>
+          </StaffLink>
           <ThemeToggle className="text-ink-soft hover:bg-muted hover:text-ink" />
         </nav>
       </div>

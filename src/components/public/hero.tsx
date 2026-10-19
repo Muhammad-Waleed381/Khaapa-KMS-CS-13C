@@ -7,6 +7,7 @@ import { fmtClock, fmtDate } from "@/lib/time";
 import { ThemeToggle } from "@/components/theme";
 import { HeroVideo, HeroVideoToggle, useHeroVideo } from "./hero-video";
 import type { ShopInfo } from "./types";
+import { StaffLink } from "@/components/staff-link";
 
 // The folders behind the name: each one is a section of the page, and lends
 // that section its ground colour. The front one (the rate list) is open.
@@ -45,9 +46,7 @@ export function Hero({ info }: { info?: ShopInfo }) {
         <div className="flex items-center gap-4">
           <HeroVideoToggle motion={motion} paused={paused} onToggle={toggle} />
           <ThemeToggle className="rounded-full border border-current/30 hover:bg-current/10" />
-          <Link href="/login" className="underline-offset-4 hover:underline">
-            Staff login
-          </Link>
+          <StaffLink className="underline-offset-4 hover:underline" />
         </div>
       </nav>
 

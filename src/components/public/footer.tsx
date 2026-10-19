@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { directionsUrl } from "./geo";
 import type { ShopSettings } from "./types";
+import { StaffLink } from "@/components/staff-link";
 
 const wa = (n: string) => `https://wa.me/${n.replace(/[^0-9]/g, "").replace(/^0/, "92")}`;
 
@@ -49,9 +50,7 @@ export function PublicFooter({ shop }: { shop?: ShopSettings }) {
               </Link>
             </li>
             <li>
-              <Link href="/login" className="underline-offset-4 hover:underline">
-                Staff login
-              </Link>
+              <StaffLink className="underline-offset-4 hover:underline" />
             </li>
           </ul>
         </div>

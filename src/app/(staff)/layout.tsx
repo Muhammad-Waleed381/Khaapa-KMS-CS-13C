@@ -31,6 +31,9 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
       const fresh = await api<Me>("/api/me");
       setMe(fresh);
       localStorage.setItem(ME_KEY, JSON.stringify(fresh));
+      // Reading the session through Auth.js re-issues the cookie with a fresh
+      // 60-day expiry, so people who use the app stay signed in.
+      fetch("/api/auth/session").catch(() => {});
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         localStorage.removeItem(ME_KEY);
