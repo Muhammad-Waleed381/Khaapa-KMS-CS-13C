@@ -679,6 +679,9 @@ async function connect(): Promise<{ db: Db; close: () => Promise<void> }> {
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
   const dir = PGLITE ?? "./.data/pglite";
+  const { mkdirSync } = await import("node:fs");
+  const { dirname } = await import("node:path");
+  mkdirSync(dirname(dir), { recursive: true });
   const client = new PGlite(dir);
   const db = drizzle({ client });
   await migrate(db, { migrationsFolder: "./drizzle" });
