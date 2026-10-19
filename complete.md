@@ -276,6 +276,7 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
 ## 11. Round 2 (2026-10-20): accounts, share requests, reports, demo data
 
 **Decisions made in this round (don't re-ask):**
+- Round 3 (UX): pages must be calm and visual, following `docs/ui-guidelines.md`, `src/components/kit.tsx` and `src/components/charts.tsx` (chart colours validated with the dataviz skill). Shares are split into **My shares** (everyone, admins included) and **Manage shares** (admins). Members without shares land on a "Buy your shares" welcome screen. Payment proof is a **screenshot only**, with no transaction ID. Sessions persist across tabs: `/login` and the public site detect a signed-in user, and the session cookie is refreshed on each visit.
 - "NayaPay" is shown as **"Online"** everywhere. Admins manage **payment accounts** (label, provider, title, number, active; deactivate rather than delete).
 - The Counter has **one current receiving account**. A cashier changes it once and every later online sale uses it, with no prompt per sale. The change also works offline, as a `account_switch` op in the outbox.
 - Every online sale (`sales.account_id`) and every pre-order (`preorders.account_id`) records the account. Reports total online money per account.
@@ -297,9 +298,11 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
 - `npm run seed:reference` only imports the menu and photos.
 
 **Testing without touching production:**
-- `.env.local` points at **production Neon**. To test against a local database, stop the user's `npm run dev` (ask first) and run `DATABASE_URL= npm run dev`. With `DATABASE_URL` empty, the app uses PGlite in `./.data`.
-- **Never run a second Next dev server or a `next build` with a different `distDir` inside the project folder while the user's dev server is running.** Its build output lands in the watched project tree and makes the user's server recompile and reload the browser about twice a second, which looks like an infinite render loop. This happened once. If you need an isolated server, put it in a separate git worktree outside the project folder.
-- The dev login admin email must be in `ADMIN_EMAILS`. The user changed it to their real accounts, so `admin.bscs23seecs@…` is no longer an admin.
+- `.env.local` points at **production Neon**. Never test writes against the user's dev server on port 3000.
+- **Isolated test server:** a git worktree **outside** the project at `~/.cache/khaapa-test`. Its `node_modules` is hard-linked with `cp -al`, its `.env.local` has `DATABASE_URL=` empty (so it uses PGlite), and it's seeded with `node scripts/seed-demo.ts --pglite ./.data/pglite`. Start it with `cd ~/.cache/khaapa-test && npx next dev -p 3100`. To test edits made in the main project, sync them first: `rsync -a --delete "<project>/src/" ~/.cache/khaapa-test/src/`. It hot-reloads.
+- **Never run a second Next dev server or a `next build` inside the project folder** while the user's dev server runs. The build output lands in the watched tree and makes the user's server recompile and reload the browser about twice a second, which looks like an infinite render loop. This happened once.
+- The dev login admin email must be in `ADMIN_EMAILS`. The user changed it to their real accounts (zamjad…, mwaleed…).
+- **Production Neon was reset to empty on 2026-10-20 at the user's request.** Don't seed it again unless asked.
 
 **Gotchas:**
 - Never call `getSetting`, `setSetting`, `getDb` or `getShop` **inside a transaction**. On PGlite's single connection it deadlocks the whole server; on Neon it silently reads outside the transaction. Read through the `tx` you're given.
