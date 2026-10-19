@@ -3,6 +3,7 @@
 import { liveQuery } from "dexie";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, ApiError } from "../api";
+import { refreshAccounts, setLocalCurrent } from "./accounts";
 import { db, setMeta, type CachedItem, type LocalSale, type OutboxOp, type SalePayload, type ShiftPayload } from "./db";
 
 // Outbox sync: every counter write is queued in IndexedDB first, then
@@ -97,6 +98,7 @@ async function flushOnce() {
     set({ online: true, lastError: null, lastSyncAt: new Date().toISOString() });
     await setMeta("lastSyncAt", state.lastSyncAt);
     await refreshItems();
+    await refreshAccounts().catch(() => undefined);
   } catch (e) {
     const offline = e instanceof ApiError && e.status === 0;
     set({
@@ -125,12 +127,19 @@ async function enqueue(op: Omit<OutboxOp, "seq" | "createdAt" | "tries" | "faile
   void syncNow();
 }
 
-export async function queueSale(sale: SalePayload) {
+/** Make `accountId` the account online payments go to: applied on this device now, uploaded when online. */
+export async function queueAccountSwitch(accountId: string) {
+  await setLocalCurrent(accountId);
+  await enqueue({ id: crypto.randomUUID(), type: "account_switch", payload: { accountId, at: new Date().toISOString() } });
+}
+
+export async function queueSale(sale: SalePayload, accountLabel: string | null = null) {
   const total = sale.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
   const local: LocalSale = {
     ...sale,
     total,
     change: sale.method === "cash" ? (sale.cashReceived ?? total) - total : null,
+    accountLabel,
     status: "pending",
     error: null,
     syncedAt: null,

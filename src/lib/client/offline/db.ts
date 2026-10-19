@@ -27,19 +27,29 @@ export type SalePayload = {
   method: "cash" | "online";
   cashReceived: number | null;
   shiftId: string | null;
+  /** Online sales: the account that was current on this device. */
+  accountId?: string | null;
   lines: SaleLine[];
 };
 
 export type ShiftPayload = { id: string; startedAt?: string; endedAt?: string; auto?: boolean };
 
+export type AccountSwitchPayload = { accountId: string; at: string };
+
+/** A payment account as the counter caches it. */
+export type CachedAccount = { id: string; label: string; provider: string; accountTitle: string; accountNumber: string };
+
 export type OutboxOp =
   | { seq?: number; id: string; type: "sale"; payload: SalePayload; createdAt: string; tries: number; failed: boolean; lastError: string | null }
-  | { seq?: number; id: string; type: "shift_start" | "shift_end"; payload: ShiftPayload; createdAt: string; tries: number; failed: boolean; lastError: string | null };
+  | { seq?: number; id: string; type: "shift_start" | "shift_end"; payload: ShiftPayload; createdAt: string; tries: number; failed: boolean; lastError: string | null }
+  | { seq?: number; id: string; type: "account_switch"; payload: AccountSwitchPayload; createdAt: string; tries: number; failed: boolean; lastError: string | null };
 
 /** This device's own sales, kept for the "recent sales" panel and day totals. */
 export type LocalSale = SalePayload & {
   total: number;
   change: number | null;
+  /** "Shop main (NayaPay ••1234)", kept so the recent list reads well offline. */
+  accountLabel?: string | null;
   status: "pending" | "synced" | "failed" | "cancelled";
   error: string | null;
   syncedAt: string | null;

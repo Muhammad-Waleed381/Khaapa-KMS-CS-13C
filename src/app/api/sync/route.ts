@@ -4,6 +4,7 @@ import { getDb, t, type Tx } from "@/db";
 import { HttpError, logActivity, parseBody, requireUser, route, type User } from "@/lib/server/api";
 import { recordSale } from "@/lib/server/stock";
 import { rs } from "@/lib/money";
+import { currentAccount, describe, getAccount, setCurrentAccount } from "../accounts/_accounts";
 
 // Offline outbox upload. Each op runs in its own transaction and is
 // idempotent on its client-generated id, so a device can resend freely.
@@ -17,6 +18,8 @@ const saleOp = z.object({
     method: z.enum(["cash", "online"]),
     cashReceived: z.number().int().nonnegative().nullish(),
     shiftId: z.uuid().nullish(),
+    // Online sales: the account the device had as current when it made the sale.
+    accountId: z.uuid().nullish(),
     lines: z
       .array(
         z.object({
@@ -43,8 +46,15 @@ const shiftEndOp = z.object({
   payload: z.object({ id: z.uuid(), endedAt: z.iso.datetime({ offset: true }), auto: z.boolean().optional() }),
 });
 
+// A cashier switched the account online payments go to (possibly offline).
+const accountOp = z.object({
+  id: z.uuid(),
+  type: z.literal("account_switch"),
+  payload: z.object({ accountId: z.uuid(), at: z.iso.datetime({ offset: true }) }),
+});
+
 const body = z.object({ ops: z.array(z.unknown()).max(100) });
-const op = z.discriminatedUnion("type", [saleOp, shiftStartOp, shiftEndOp]);
+const op = z.discriminatedUnion("type", [saleOp, shiftStartOp, shiftEndOp, accountOp]);
 
 type Result = { id: string; ok: boolean; duplicate?: boolean; error?: string; permanent?: boolean };
 
@@ -55,6 +65,9 @@ async function apply(tx: Tx, user: User, o: z.infer<typeof op>): Promise<Omit<Re
       const total = p.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
       if (p.cashReceived < total) throw new HttpError(400, "Cash received is less than the total");
     }
+    // Money already went into this account, so a since-deactivated one still counts.
+    const accountId = p.method === "online" ? (p.accountId ?? null) : null;
+    if (accountId && !(await getAccount(tx, accountId))) throw new HttpError(400, "Unknown payment account");
     const r = await recordSale(tx, {
       id: p.id,
       userId: user.id,
@@ -65,6 +78,7 @@ async function apply(tx: Tx, user: User, o: z.infer<typeof op>): Promise<Omit<Re
       lines: p.lines,
     });
     if (!r.duplicate) {
+      if (accountId) await tx.update(t.sales).set({ accountId }).where(eq(t.sales.id, p.id));
       const units = p.lines.reduce((s, l) => s + l.qty, 0);
       await logActivity(
         tx,
@@ -75,6 +89,18 @@ async function apply(tx: Tx, user: User, o: z.infer<typeof op>): Promise<Omit<Re
       );
     }
     return { ok: true, duplicate: r.duplicate };
+  }
+
+  if (o.type === "account_switch") {
+    // The server keeps whatever is current if the chosen account is gone or
+    // turned off; the device picks that up on its next refresh.
+    const account = await getAccount(tx, o.payload.accountId);
+    if (!account?.active) return { ok: true };
+    const before = await currentAccount(tx);
+    if (before?.id === account.id) return { ok: true, duplicate: true };
+    await setCurrentAccount(tx, account.id);
+    await logActivity(tx, user.id, "account", `${user.name} switched online payments to ${describe(account)}`, account.id);
+    return { ok: true };
   }
 
   if (o.type === "shift_start") {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { getPosition } from "@/components/public/geo";
 import type { ShopSettings } from "@/components/public/types";
 import { toast } from "@/components/toast";
-import { Button, Card, Empty, Field, Input, PageHeader, Spinner, Textarea } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Input, Modal, PageHeader, Select, Spinner, Textarea } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { useMe } from "@/lib/client/me";
 
@@ -16,6 +16,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Settings" sub="Shop details shown on the public site and pre-order page." />
+      <AccountsCard />
       {data ? (
         <SettingsForm key={JSON.stringify(data.shop)} initial={data.shop} />
       ) : (
@@ -33,8 +34,6 @@ function SettingsForm({ initial }: { initial: ShopSettings }) {
   const [lng, setLng] = useState(String(initial.location.lng));
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
-
-  const np = (k: keyof ShopSettings["nayapay"], v: string) => setS({ ...s, nayapay: { ...s.nayapay, [k]: v } });
 
   async function useHere() {
     setLocating(true);
@@ -115,26 +114,193 @@ function SettingsForm({ initial }: { initial: ShopSettings }) {
         </Field>
       </Card>
 
-      <Card className="space-y-3 p-5">
-        <h2 className="text-sm font-semibold">NayaPay (pre-order advance payments)</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Account name">
-            <Input value={s.nayapay.name} onChange={(e) => np("name", e.target.value)} />
-          </Field>
-          <Field label="NayaPay ID or number">
-            <Input value={s.nayapay.handle} onChange={(e) => np("handle", e.target.value)} />
-          </Field>
-        </div>
-        <Field label="Instructions for customers" hint="Defaults to asking them to put the order code in the payment note.">
-          <Textarea value={s.nayapay.instructions} onChange={(e) => np("instructions", e.target.value)} />
-        </Field>
-      </Card>
-
       <div className="flex justify-end">
         <Button type="submit" variant="primary" disabled={busy}>
           {busy ? "Saving…" : "Save settings"}
         </Button>
       </div>
     </form>
+  );
+}
+
+const PROVIDERS = ["NayaPay", "JazzCash", "Easypaisa", "Bank", "Other"] as const;
+
+type Account = {
+  id: string;
+  label: string;
+  provider: (typeof PROVIDERS)[number];
+  accountTitle: string;
+  accountNumber: string;
+  active: boolean;
+};
+
+type Draft = Omit<Account, "id" | "active">;
+const EMPTY: Draft = { label: "", provider: "NayaPay", accountTitle: "", accountNumber: "" };
+
+/**
+ * Accounts that receive online money. Old payments keep pointing at the account
+ * they went into, so accounts are turned off rather than deleted.
+ */
+function AccountsCard() {
+  const { data, reload } = useApi<{ accounts: Account[]; currentId: string | null }>("/api/accounts");
+  const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const accounts = data?.accounts ?? [];
+
+  async function run(fn: () => Promise<unknown>, done: string) {
+    setBusy(true);
+    try {
+      await fn();
+      toast(done);
+      await reload();
+      return true;
+    } catch (e) {
+      toast((e as Error).message, "bad");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDraft(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const { id, draft } = editing;
+    const ok = await run(
+      () => (id ? api(`/api/accounts/${id}`, { method: "PATCH", body: draft }) : api("/api/accounts", { body: draft })),
+      id ? "Account updated" : "Account added",
+    );
+    if (ok) setEditing(null);
+  }
+
+  const set = (k: keyof Draft, v: string) => editing && setEditing({ ...editing, draft: { ...editing.draft, [k]: v } });
+
+  return (
+    <Card className="mb-5 space-y-3 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Payment accounts</h2>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            Where online payments go. The <b>current</b> account receives counter sales and pre-orders; cashiers can switch
+            it from the Counter. Every payment remembers the account it went into.
+          </p>
+        </div>
+        <Button type="button" size="sm" onClick={() => setEditing({ id: null, draft: EMPTY })}>
+          Add account
+        </Button>
+      </div>
+
+      {!data ? (
+        <div className="grid place-items-center py-6">
+          <Spinner />
+        </div>
+      ) : accounts.length === 0 ? (
+        <p className="rounded-md bg-muted px-3 py-2 text-sm text-ink-soft">
+          No accounts yet. Add one so customers know where to pay and online sales are tracked by account.
+        </p>
+      ) : (
+        <ul className="divide-y divide-line rounded-md border border-line">
+          {accounts.map((a) => {
+            const current = a.id === data.currentId;
+            return (
+              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
+                    {a.label}
+                    {current && <Badge tone="good">Current</Badge>}
+                    {!a.active && <Badge tone="bad">Off</Badge>}
+                  </div>
+                  <div className="truncate text-xs text-ink-soft">
+                    {a.provider} · {a.accountTitle} · <span className="font-mono">{a.accountNumber}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {a.active && !current && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => run(() => api("/api/accounts/current", { body: { accountId: a.id } }), `Online payments now go to ${a.label}`)}
+                    >
+                      Make current
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setEditing({
+                        id: a.id,
+                        draft: { label: a.label, provider: a.provider, accountTitle: a.accountTitle, accountNumber: a.accountNumber },
+                      })
+                    }
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() =>
+                      run(
+                        () => api(`/api/accounts/${a.id}`, { method: "PATCH", body: { active: !a.active } }),
+                        a.active ? `${a.label} turned off` : `${a.label} turned on`,
+                      )
+                    }
+                  >
+                    {a.active ? "Turn off" : "Turn on"}
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? "Edit account" : "Add payment account"}>
+        {editing && (
+          <form onSubmit={saveDraft} className="space-y-3">
+            <Field label="What it's for" hint="e.g. “Shop main”, “Pre-orders”, “Ali's NayaPay”.">
+              <Input value={editing.draft.label} onChange={(e) => set("label", e.target.value)} required />
+            </Field>
+            <Field label="Provider">
+              <Select value={editing.draft.provider} onChange={(e) => set("provider", e.target.value)}>
+                {PROVIDERS.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Account title" hint="The name the customer sees when sending money.">
+              <Input value={editing.draft.accountTitle} onChange={(e) => set("accountTitle", e.target.value)} required />
+            </Field>
+            <Field label="Account number / IBAN">
+              <Input
+                value={editing.draft.accountNumber}
+                onChange={(e) => set("accountNumber", e.target.value)}
+                className="font-mono"
+                required
+              />
+            </Field>
+            {editing.id && (
+              <p className="text-xs text-ink-soft">
+                Changing the number changes it for past payments too. If the account itself changed, turn this one off and
+                add a new one instead.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={busy}>
+                {busy ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+    </Card>
   );
 }

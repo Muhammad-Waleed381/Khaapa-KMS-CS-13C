@@ -5,11 +5,13 @@ import { Badge, Button, Card, cx, Empty, Input, Modal, Spinner } from "@/compone
 import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
 import { useMe } from "@/lib/client/me";
+import { describeAccount, localCurrentAccount, useAccounts } from "@/lib/client/offline/accounts";
 import { db, type CachedItem, type LocalSale } from "@/lib/client/offline/db";
 import { OnDuty } from "@/components/on-duty";
 import { adoptShift, endShift, holdShift, startShift, useLocalShift, type LocalShift } from "@/lib/client/offline/shift";
 import {
   cancelPendingSale,
+  queueAccountSwitch,
   queueSale,
   refreshItems,
   retryFailed,
@@ -189,16 +191,26 @@ function Counter({
 
   async function complete(method: "cash" | "online", cashReceived: number | null) {
     const id = crypto.randomUUID();
-    await queueSale({
-      id,
-      createdAt: new Date().toISOString(),
-      method,
-      cashReceived: method === "cash" ? cashReceived : null,
-      shiftId: shift.id,
-      lines: cart.map(({ itemId, name, qty, unitPrice }) => ({ itemId, name, qty, unitPrice })),
-    });
+    // Online money goes to whichever account is current on this device.
+    const account = method === "online" ? await localCurrentAccount() : null;
+    await queueSale(
+      {
+        id,
+        createdAt: new Date().toISOString(),
+        method,
+        cashReceived: method === "cash" ? cashReceived : null,
+        shiftId: shift.id,
+        accountId: account?.id ?? null,
+        lines: cart.map(({ itemId, name, qty, unitPrice }) => ({ itemId, name, qty, unitPrice })),
+      },
+      account ? describeAccount(account) : null,
+    );
     const change = method === "cash" && cashReceived != null ? cashReceived - total : 0;
-    toast(method === "cash" ? `Sale saved · change ${rs(change)}` : `Sale saved · ${rs(total)} online`);
+    toast(
+      method === "cash"
+        ? `Sale saved · change ${rs(change)}`
+        : `Sale saved · ${rs(total)} online${account ? ` to ${account.label}` : ""}`,
+    );
     setCart([]);
     setAllowed(new Set());
     setCartOpen(false);
@@ -459,6 +471,8 @@ function CartPanel({
   const [method, setMethod] = useState<"cash" | "online">("cash");
   const [received, setReceived] = useState("");
   const [busy, setBusy] = useState(false);
+  const { accounts, current } = useAccounts();
+  const [picking, setPicking] = useState(false);
 
   const receivedPaisa = received.trim() === "" ? total : toPaisa(Number(received));
   const validCash = Number.isFinite(receivedPaisa) && receivedPaisa >= total;
@@ -530,7 +544,7 @@ function CartPanel({
                 method === m ? "bg-surface text-ink shadow-sm" : "text-ink-soft",
               )}
             >
-              {m === "online" ? "Online (NayaPay)" : "Cash"}
+              {m === "online" ? "Online" : "Cash"}
             </button>
           ))}
         </div>
@@ -584,16 +598,85 @@ function CartPanel({
             </div>
           </div>
         ) : (
-          <p className="rounded-lg bg-muted px-3 py-2.5 text-xs text-ink-soft">
-            Confirm the customer&apos;s NayaPay payment of <b className="text-ink">{rs(total)}</b> has arrived before completing.
-          </p>
+          <div className="space-y-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-ink-soft">
+            {current ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  To <b className="text-ink">{describeAccount(current)}</b>
+                </span>
+                <button onClick={() => setPicking(true)} className="shrink-0 font-medium text-primary hover:underline">
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <span>No payment account chosen{accounts.length ? "" : ". An admin can add one in Settings"}.</span>
+                {accounts.length > 0 && (
+                  <button onClick={() => setPicking(true)} className="shrink-0 font-medium text-primary hover:underline">
+                    Choose
+                  </button>
+                )}
+              </div>
+            )}
+            <p>
+              Confirm the customer&apos;s payment of <b className="text-ink">{rs(total)}</b> has arrived before completing.
+            </p>
+          </div>
         )}
+        <AccountPicker open={picking} onClose={() => setPicking(false)} />
 
         <Button variant="primary" size="lg" className="w-full" disabled={!canComplete} onClick={submit}>
           Complete sale
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Switch the account online payments go to. It stays until someone switches
+ * again; works offline and uploads with the next sync.
+ */
+function AccountPicker({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { accounts, current } = useAccounts();
+  return (
+    <Modal open={open} onClose={onClose} title="Online payments go to">
+      {accounts.length === 0 ? (
+        <Empty>No payment accounts yet. An admin can add them in Settings.</Empty>
+      ) : (
+        <ul className="space-y-2">
+          {accounts.map((a) => {
+            const active = a.id === current?.id;
+            return (
+              <li key={a.id}>
+                <button
+                  onClick={async () => {
+                    if (!active) {
+                      await queueAccountSwitch(a.id);
+                      toast(`Online payments now go to ${a.label}`);
+                    }
+                    onClose();
+                  }}
+                  className={cx(
+                    "w-full rounded-lg border px-3 py-2.5 text-left transition hover:bg-muted",
+                    active ? "border-primary bg-primary-soft" : "border-line",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 text-sm font-medium">
+                    {a.label}
+                    {active && <Badge tone="good">Current</Badge>}
+                  </div>
+                  <div className="text-xs text-ink-soft">
+                    {a.provider} · {a.accountTitle} · <span className="font-mono">{a.accountNumber}</span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="mt-4 text-xs text-ink-faint">Every online sale after this is recorded against the chosen account.</p>
+    </Modal>
   );
 }
 
@@ -619,6 +702,7 @@ function RecentSales({ open, onClose }: { open: boolean; onClose: () => void }) 
                 <div className="truncate text-sm">{s.lines.map((l) => `${l.qty}× ${l.name}`).join(", ")}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <Badge tone={s.method === "cash" ? "neutral" : "accent"}>{s.method}</Badge>
+                  {s.method === "online" && s.accountLabel && <span className="text-xs text-ink-faint">to {s.accountLabel}</span>}
                   {s.status === "pending" && <Badge tone="warn">Not synced</Badge>}
                   {s.status === "failed" && <Badge tone="bad">Rejected: {s.error}</Badge>}
                   {s.status === "cancelled" && <Badge>Cancelled</Badge>}

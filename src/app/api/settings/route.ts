@@ -10,11 +10,6 @@ const Body = z.object({
     label: z.string().trim().min(1).max(80),
   }),
   hours: z.string().trim().max(300),
-  nayapay: z.object({
-    name: z.string().trim().max(80),
-    handle: z.string().trim().max(80),
-    instructions: z.string().trim().max(400),
-  }),
   whatsapp: z.string().trim().max(20),
 });
 
