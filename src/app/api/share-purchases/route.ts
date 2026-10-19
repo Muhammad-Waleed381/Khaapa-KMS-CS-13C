@@ -48,14 +48,15 @@ export const GET = route(async (req) => {
   return { purchases };
 });
 
+// A payment screenshot is the proof; a transaction ID is no longer asked for
+// (older clients may still send one).
 const body = z.object({
   shares: z.number().int().min(1),
-  paymentRef: z.string().trim().min(3, "Enter the transaction ID").max(80),
+  paymentRef: z.string().trim().max(80).nullish(),
   proof: z
-    .string()
+    .string({ error: "Attach a screenshot of your payment" })
     .max(420_000, "Screenshot is too large")
-    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Not an image")
-    .nullish(),
+    .regex(/^data:image\/(jpeg|png|webp);base64,/, "Not an image"),
 });
 
 // Request shares. The price and account are copied from the settings now, so
@@ -81,15 +82,15 @@ export const POST = route(async (req) => {
         pricePerShare: s.pricePerShare,
         total: b.shares * s.pricePerShare,
         accountId: s.accountId,
-        paymentRef: b.paymentRef,
-        proof: b.proof ?? null,
+        paymentRef: b.paymentRef || null,
+        proof: b.proof,
       })
       .returning();
     await logActivity(
       tx,
       user.id,
       "shares",
-      `${user.name} requested ${r.shares} share${r.shares > 1 ? "s" : ""} at ${rs(r.pricePerShare)} (${rs(r.total)}, ref ${r.paymentRef})`,
+      `${user.name} requested ${r.shares} share${r.shares > 1 ? "s" : ""} at ${rs(r.pricePerShare)} (${rs(r.total)})`,
       r.id,
     );
     return r;

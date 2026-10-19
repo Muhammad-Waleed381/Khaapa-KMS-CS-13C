@@ -2,15 +2,17 @@ import { asc, eq } from "drizzle-orm";
 import { getDb, t } from "@/db";
 import { HttpError, logActivity, parseBody, requireUser, route } from "@/lib/server/api";
 import { rs } from "@/lib/money";
-import { accountById, readShareSettings, shareSettingsInput } from "../shared";
+import { accountById, readShareSettings, sharesHeldOrPending, shareSettingsInput } from "../shared";
 
 // Any approved account can read the settings (to buy shares); admins also get
-// the active payment accounts to choose from.
+// the active payment accounts to choose from, and how many shares have been
+// requested so far (approved + waiting) against what's on offer.
 export const GET = route(async () => {
   const user = await requireUser();
   const db = await getDb();
   const settings = await readShareSettings(db);
   const account = await accountById(db, settings.accountId);
+  const requested = await sharesHeldOrPending(db);
   const accounts =
     user.role === "admin"
       ? await db
@@ -19,7 +21,7 @@ export const GET = route(async () => {
           .where(eq(t.paymentAccounts.active, true))
           .orderBy(asc(t.paymentAccounts.createdAt))
       : undefined;
-  return { settings, account, accounts };
+  return { settings, account, accounts, requested };
 });
 
 export const POST = route(async (req) => {
