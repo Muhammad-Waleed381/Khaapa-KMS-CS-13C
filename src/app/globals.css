@@ -38,6 +38,12 @@
   --chart-3: #0a0a0a;
   --chart-4: #a3b896;
   --chart-5: #d4d4d4;
+  /* Chart series, validated for colour-blind separation (dataviz validator):
+     use in this order, never cycled. --series-muted is for context data. */
+  --series-1: #3d7a2e;
+  --series-2: #2a78d6;
+  --series-3: #eb6834;
+  --series-muted: #c4c4c8;
   --radius: 0.5rem;
   --sidebar: #fafafa;
   --sidebar-foreground: #0a0a0a;
@@ -91,6 +97,10 @@
   --chart-3: #fafafa;
   --chart-4: #4e6b43;
   --chart-5: #404040;
+  --series-1: #5aa33f;
+  --series-2: #3987e5;
+  --series-3: #d95926;
+  --series-muted: #3f3f46;
   --sidebar: #0a0a0a;
   --sidebar-foreground: #fafafa;
   --sidebar-primary: #84b872;
@@ -143,6 +153,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-muted: var(--series-muted);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

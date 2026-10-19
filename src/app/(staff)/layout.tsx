@@ -83,11 +83,15 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
 
   const isAdmin = me.user.role === "admin";
   const nav = NAV.filter((n) => !n.admin || isAdmin);
+  // The most specific matching entry wins (/shares/manage over /shares).
+  const current = nav
+    .filter((n) => pathname === n.href || pathname.startsWith(n.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   const navList = (
     <nav className="flex flex-col gap-0.5">
       {nav.map((n) => {
-        const active = pathname === n.href || pathname.startsWith(n.href + "/");
+        const active = n.href === current;
         return (
           <Link
             key={n.href}
