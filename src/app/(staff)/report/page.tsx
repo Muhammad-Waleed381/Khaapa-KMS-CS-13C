@@ -12,6 +12,7 @@ type Report = {
   date: string;
   totals: { total: number; cash: number; online: number; count: number; voids: number; cogs: number; grossProfit: number };
   expectedCash: number;
+  onlineByAccount: { accountId: string | null; label: string | null; provider: string | null; total: number; count: number }[];
   itemsSold: { itemId: string; name: string; qty: number; revenue: number; cost: number; profit: number }[];
   oversold: { saleId: string; name: string; qty: number; at: string }[];
   writeOffs: { name: string; kind: string; qty: number; cost: number; note: string | null; by: string | null }[];
@@ -22,6 +23,9 @@ type Report = {
   preorders: { code: string; customerName: string; total: number }[];
 };
 
+const accountName = (a: Report["onlineByAccount"][number]) =>
+  a.accountId ? `${a.label}${a.provider ? ` (${a.provider})` : ""}` : "Account not recorded";
+
 /** Plain text for WhatsApp: short lines, no emoji, *bold* headings. */
 function toText(r: Report) {
   const out = [
@@ -30,6 +34,9 @@ function toText(r: Report) {
     `Sales: ${rs(r.totals.total)} (${r.totals.count} sales${r.totals.voids ? `, ${r.totals.voids} voided` : ""})`,
     `Cash: ${rs(r.totals.cash)}`,
     `Online: ${rs(r.totals.online)}`,
+    ...(r.onlineByAccount.length > 1 || r.onlineByAccount.some((a) => a.accountId)
+      ? r.onlineByAccount.map((a) => `  ${accountName(a)}: ${rs(a.total)}`)
+      : []),
     `Cash expected in hand: ${rs(r.expectedCash)}`,
     `Gross profit: ${rs(r.totals.grossProfit)} (cost ${rs(r.totals.cogs)})`,
   ];
@@ -94,7 +101,7 @@ export default function ReportPage() {
     <div className="mx-auto max-w-3xl">
       <PageHeader
         title="Day report"
-        sub="For the team only. Share it at closing time."
+        sub="The closing summary of one day, for the team only."
         actions={
           <>
             <div className="flex items-center gap-1">
@@ -129,6 +136,12 @@ export default function ReportPage() {
       <StaleNote stale={stale} />
       {error && !r && <Empty>{error}</Empty>}
 
+      <p className="mb-4 rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
+        At closing time, count the cash drawer and check it matches <b className="text-foreground">Cash in hand (expected)</b>,
+        and check each online account received what is listed below. Then press Share to send this report to the team&apos;s
+        WhatsApp group. It also lists what sold, what was restocked or thrown away, and who worked the counter.
+      </p>
+
       {r && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -137,6 +150,12 @@ export default function ReportPage() {
             <Stat label="Online" value={rs(r.totals.online)} />
             <Stat label="Gross profit" value={rs(r.totals.grossProfit)} sub={`Cost ${rs(r.totals.cogs)}`} />
           </div>
+
+          {r.onlineByAccount.length > 0 && (
+            <Section title={`Online money by account · ${rs(r.totals.online)}`} show>
+              <Rows rows={r.onlineByAccount.map((a) => [`${accountName(a)} · ${a.count} sales`, rs(a.total)])} />
+            </Section>
+          )}
 
           <Section title="Items sold" empty="Nothing sold." show={r.itemsSold.length > 0}>
             <table className="w-full text-sm">

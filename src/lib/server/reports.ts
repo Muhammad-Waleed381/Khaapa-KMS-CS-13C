@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { t, type DB } from "@/db";
+import { slotForShift, slotInstant } from "@/lib/duty";
 import { addDays, pkDate, pkDayRange } from "@/lib/time";
 import { stockValue, summary } from "./finance";
 import { stockLevels } from "./stock";
@@ -11,10 +12,120 @@ const pkHour = (col: unknown) => sql<number>`extract(hour from (${col} at time z
 
 export type SaleRow = Awaited<ReturnType<typeof salesForDay>>["sales"][number];
 
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** An inclusive range of PKT calendar days. */
+export type Period = { from: string; to: string };
+
+/**
+ * ?from=&to= (or ?date= for one day) as a PKT period. Missing dates default to
+ * the last `defaultDays` days up to today; the span is capped at about a year.
+ */
+export function periodFromQuery(q: URLSearchParams, defaultDays = 1): Period {
+  const today = pkDate();
+  const date = q.get("date") ?? "";
+  if (DATE.test(date)) return { from: date, to: date };
+  let from = q.get("from") ?? "";
+  let to = q.get("to") ?? "";
+  if (!DATE.test(to)) to = today;
+  if (!DATE.test(from)) from = addDays(to, -(defaultDays - 1));
+  if (from > to) [from, to] = [to, from];
+  if (from < addDays(to, -400)) from = addDays(to, -400);
+  return { from, to };
+}
+
+type SaleFilters = { method?: string | null; userId?: string | null; voided?: string | null };
+
+const saleFilters = (f: SaleFilters) => [
+  f.method === "cash" || f.method === "online" ? eq(t.sales.method, f.method) : undefined,
+  f.userId ? eq(t.sales.userId, f.userId) : undefined,
+  f.voided === "1" ? eq(t.sales.voided, true) : f.voided === "0" ? eq(t.sales.voided, false) : undefined,
+];
+
+/** Online money (not voided) per receiving account. accountId null = sales from before accounts were recorded. */
+async function onlineByAccount(db: DB, start: Date, end: Date, f: SaleFilters = {}) {
+  if (f.method === "cash" || f.voided === "1") return [];
+  return db
+    .select({
+      accountId: t.sales.accountId,
+      label: t.paymentAccounts.label,
+      provider: t.paymentAccounts.provider,
+      total: sql<number>`sum(${t.sales.total})::int`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(t.sales)
+    .leftJoin(t.paymentAccounts, eq(t.paymentAccounts.id, t.sales.accountId))
+    .where(
+      and(
+        gte(t.sales.createdAt, start),
+        lt(t.sales.createdAt, end),
+        eq(t.sales.method, "online"),
+        eq(t.sales.voided, false),
+        f.userId ? eq(t.sales.userId, f.userId) : undefined,
+      ),
+    )
+    .groupBy(t.sales.accountId, t.paymentAccounts.label, t.paymentAccounts.provider)
+    .orderBy(desc(sql`4`));
+}
+
+/**
+ * Sales over a period: totals, per-day subtotals and online money per account.
+ * The individual sales (with lines) come back only for a single day; for longer
+ * periods the page loads a day's sales when it is opened.
+ */
+export async function salesForPeriod(db: DB, p: Period, f: SaleFilters) {
+  const start = pkDayRange(p.from).start;
+  const end = pkDayRange(p.to).end;
+  const where = and(gte(t.sales.createdAt, start), lt(t.sales.createdAt, end), ...saleFilters(f));
+
+  const days = await db
+    .select({
+      date: pkDay(t.sales.createdAt),
+      total: sql<number>`coalesce(sum(${t.sales.total}) filter (where not ${t.sales.voided}), 0)::int`,
+      cash: sql<number>`coalesce(sum(${t.sales.total}) filter (where not ${t.sales.voided} and ${t.sales.method} = 'cash'), 0)::int`,
+      online: sql<number>`coalesce(sum(${t.sales.total}) filter (where not ${t.sales.voided} and ${t.sales.method} = 'online'), 0)::int`,
+      count: sql<number>`count(*) filter (where not ${t.sales.voided})::int`,
+      voids: sql<number>`count(*) filter (where ${t.sales.voided})::int`,
+    })
+    .from(t.sales)
+    .where(where)
+    .groupBy(sql`1`)
+    .orderBy(desc(sql`1`));
+
+  const totals = days.reduce(
+    (a, d) => ({
+      total: a.total + d.total,
+      cash: a.cash + d.cash,
+      online: a.online + d.online,
+      count: a.count + d.count,
+      voids: a.voids + d.voids,
+    }),
+    { total: 0, cash: 0, online: 0, count: 0, voids: 0 },
+  );
+
+  // Everyone who sold in the period, for the cashier filter.
+  const cashiers = await db
+    .selectDistinct({ id: t.sales.userId, name: t.users.name })
+    .from(t.sales)
+    .innerJoin(t.users, eq(t.users.id, t.sales.userId))
+    .where(and(gte(t.sales.createdAt, start), lt(t.sales.createdAt, end)))
+    .orderBy(asc(t.users.name));
+
+  const single = p.from === p.to;
+  return {
+    ...p,
+    totals,
+    accounts: await onlineByAccount(db, start, end, f),
+    days,
+    cashiers,
+    sales: single ? (await salesForDay(db, p.from, f)).sales : null,
+  };
+}
+
 export async function salesForDay(
   db: DB,
   date: string,
-  f: { method?: string | null; userId?: string | null; voided?: string | null },
+  f: SaleFilters,
 ) {
   const { start, end } = pkDayRange(date);
   const voider = alias(t.users, "voider");
@@ -35,19 +146,15 @@ export async function salesForDay(
       createdAt: t.sales.createdAt,
       userId: t.sales.userId,
       cashier: t.users.name,
+      accountId: t.sales.accountId,
+      account: t.paymentAccounts.label,
+      accountProvider: t.paymentAccounts.provider,
     })
     .from(t.sales)
     .innerJoin(t.users, eq(t.users.id, t.sales.userId))
     .leftJoin(voider, eq(voider.id, t.sales.voidedBy))
-    .where(
-      and(
-        gte(t.sales.createdAt, start),
-        lt(t.sales.createdAt, end),
-        f.method === "cash" || f.method === "online" ? eq(t.sales.method, f.method) : undefined,
-        f.userId ? eq(t.sales.userId, f.userId) : undefined,
-        f.voided === "1" ? eq(t.sales.voided, true) : f.voided === "0" ? eq(t.sales.voided, false) : undefined,
-      ),
-    )
+    .leftJoin(t.paymentAccounts, eq(t.paymentAccounts.id, t.sales.accountId))
+    .where(and(gte(t.sales.createdAt, start), lt(t.sales.createdAt, end), ...saleFilters(f)))
     .orderBy(desc(t.sales.createdAt));
 
   const lines = rows.length
@@ -281,6 +388,7 @@ export async function dayReport(db: DB, date: string) {
     date,
     totals: { ...day.totals, cogs, grossProfit: day.totals.total - cogs },
     expectedCash: day.totals.cash,
+    onlineByAccount: await onlineByAccount(db, start, end),
     itemsSold,
     oversold,
     writeOffs,
@@ -291,6 +399,122 @@ export async function dayReport(db: DB, date: string) {
     preorders: preorderRows,
   };
 }
+
+/**
+ * Today so far, against yesterday and the same weekday last week up to the
+ * same time of day, so the comparison is fair before closing.
+ */
+export async function todaySoFar(db: DB) {
+  const now = new Date();
+  const today = pkDate(now);
+  const elapsed = now.getTime() - pkDayRange(today).start.getTime();
+  const upTo = async (date: string) => {
+    const start = pkDayRange(date).start;
+    const s = await summary(db, start, new Date(start.getTime() + elapsed));
+    return { revenue: s.revenue, cash: s.cash, online: s.online, salesCount: s.salesCount, grossProfit: s.grossProfit };
+  };
+  const [now_, yesterday, lastWeek] = await Promise.all([upTo(today), upTo(addDays(today, -1)), upTo(addDays(today, -7))]);
+  return { date: today, asOf: now.toISOString(), today: now_, yesterday, lastWeek };
+}
+
+/**
+ * Counter shifts in a period, each set against the duty slot it belongs to
+ * (planned vs actual), with the money taken during it. Also slots that ended
+ * with nobody starting a shift, and per-person totals for HR.
+ */
+export async function shiftsForPeriod(db: DB, p: Period) {
+  const start = pkDayRange(p.from).start;
+  const end = pkDayRange(p.to).end;
+  const rows = await db
+    .select({
+      id: t.shifts.id,
+      userId: t.shifts.userId,
+      name: t.users.name,
+      startedAt: t.shifts.startedAt,
+      endedAt: t.shifts.endedAt,
+    })
+    .from(t.shifts)
+    .innerJoin(t.users, eq(t.users.id, t.shifts.userId))
+    .where(and(gte(t.shifts.startedAt, start), lt(t.shifts.startedAt, end)))
+    .orderBy(desc(t.shifts.startedAt));
+
+  const slots = await db
+    .select({ userId: t.slots.userId, name: t.users.name, date: t.slots.date, start: t.slots.start, end: t.slots.end })
+    .from(t.slots)
+    .innerJoin(t.users, eq(t.users.id, t.slots.userId))
+    .where(and(gte(t.slots.date, p.from), lte(t.slots.date, p.to)))
+    .orderBy(asc(t.slots.date), asc(t.slots.start));
+
+  const money = rows.length
+    ? await db
+        .select({
+          shiftId: t.sales.shiftId,
+          sales: sql<number>`count(*)::int`,
+          cash: sql<number>`coalesce(sum(${t.sales.total}) filter (where ${t.sales.method} = 'cash'), 0)::int`,
+          online: sql<number>`coalesce(sum(${t.sales.total}) filter (where ${t.sales.method} = 'online'), 0)::int`,
+        })
+        .from(t.sales)
+        .where(and(inArray(t.sales.shiftId, rows.map((r) => r.id)), eq(t.sales.voided, false)))
+        .groupBy(t.sales.shiftId)
+    : [];
+  const byShift = new Map(money.map((m) => [m.shiftId, m]));
+
+  const now = Date.now();
+  const minutesBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 60000);
+  const covered = new Set<string>();
+  const shifts = rows.map((s) => {
+    const slot = slotForShift(s, slots);
+    if (slot) covered.add(`${slot.userId}|${slot.date}|${slot.start}`);
+    const m = byShift.get(s.id);
+    return {
+      ...s,
+      date: pkDate(s.startedAt),
+      minutes: minutesBetween(s.startedAt, s.endedAt ?? new Date(now)),
+      planned: slot ? { start: slot.start, end: slot.end } : null,
+      // Positive = started after the slot began.
+      lateBy: slot ? minutesBetween(slotInstant(slot.date, slot.start), s.startedAt) : null,
+      // Positive = ended before the slot was over.
+      leftEarlyBy: slot && s.endedAt ? minutesBetween(s.endedAt, slotInstant(slot.date, slot.end)) : null,
+      sales: m?.sales ?? 0,
+      cash: m?.cash ?? 0,
+      online: m?.online ?? 0,
+    };
+  });
+
+  const missed = slots
+    .filter((sl) => slotInstant(sl.date, sl.end).getTime() < now && !covered.has(`${sl.userId}|${sl.date}|${sl.start}`))
+    .map((sl) => ({ userId: sl.userId, name: sl.name, date: sl.date, start: sl.start, end: sl.end }));
+
+  const people = new Map<
+    string,
+    { userId: string; name: string; shifts: number; minutes: number; sales: number; cash: number; online: number; late: number; missed: number }
+  >();
+  const person = (userId: string, name: string) => {
+    let row = people.get(userId);
+    if (!row) people.set(userId, (row = { userId, name, shifts: 0, minutes: 0, sales: 0, cash: 0, online: 0, late: 0, missed: 0 }));
+    return row;
+  };
+  for (const s of shifts) {
+    const row = person(s.userId, s.name);
+    row.shifts++;
+    row.minutes += s.minutes;
+    row.sales += s.sales;
+    row.cash += s.cash;
+    row.online += s.online;
+    if ((s.lateBy ?? 0) > LATE_GRACE) row.late++;
+  }
+  for (const m of missed) person(m.userId, m.name).missed++;
+
+  return {
+    ...p,
+    shifts,
+    missed,
+    people: [...people.values()].sort((a, b) => b.minutes - a.minutes),
+  };
+}
+
+/** Minutes after the slot start before a shift counts as late. */
+export const LATE_GRACE = 5;
 
 export async function activityPage(db: DB, o: { limit: number; before?: Date | null; kind?: string | null }) {
   const rows = await db

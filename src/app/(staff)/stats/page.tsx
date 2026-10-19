@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Badge, Card, cx, Empty, PageHeader, StaleNote, Stat } from "@/components/ui";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
+import { Badge, Button, Card, cx, Empty, PageHeader, StaleNote, Stat } from "@/components/ui";
 import { CashierBoard } from "@/components/cashier-board";
 import { useApi } from "@/lib/client/api";
+import { useMe } from "@/lib/client/me";
 import { rs } from "@/lib/money";
-import { fmtDate } from "@/lib/time";
+import { fmtClock, fmtDate, pkTime } from "@/lib/time";
 
 type Range = "today" | "7d" | "30d" | "all";
 
@@ -29,7 +31,10 @@ type Stats = {
   topItems: { itemId: string; name: string; qty: number; revenue: number; cost: number }[];
   byCashier: { userId: string; name: string; count: number; revenue: number; cash: number; online: number }[];
   lowStock: { id: string; name: string; stock: number; lowStockAt: number }[];
+  today: { date: string; asOf: string; today: DaySoFar; yesterday: DaySoFar; lastWeek: DaySoFar };
 };
+
+type DaySoFar = { revenue: number; cash: number; online: number; salesCount: number; grossProfit: number };
 
 const RANGES: { id: Range; label: string }[] = [
   { id: "today", label: "Today" },
@@ -38,35 +43,64 @@ const RANGES: { id: Range; label: string }[] = [
   { id: "all", label: "All time" },
 ];
 
-export default function StatsPage() {
-  const [range, setRange] = useState<Range>("today");
-  const { data, error, stale } = useApi<Stats>(`/api/stats?range=${range}`);
+export default function DashboardPage() {
+  const { isAdmin } = useMe();
+  const [range, setRange] = useState<Range>("7d");
+  const { data, error, stale } = useApi<Stats>(isAdmin ? `/api/stats?range=${range}` : null);
   const s = data?.summary;
 
+  if (!isAdmin)
+    return (
+      <div className="mx-auto max-w-md pt-10">
+        <Empty>
+          The dashboard is for admins.
+          <div className="mt-4">
+            <Link href="/pos">
+              <Button variant="primary">Go to the Counter</Button>
+            </Link>
+          </div>
+        </Empty>
+      </div>
+    );
+
+  const t = data?.today;
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader
-        title="Stats"
-        sub="Profit uses FIFO cost: the oldest stock is counted as sold first."
-        actions={
-          <div className="flex rounded-lg border border-line bg-surface p-0.5">
-            {RANGES.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => setRange(r.id)}
-                className={cx(
-                  "rounded-md px-3 py-1.5 text-sm font-medium",
-                  range === r.id ? "bg-primary-soft text-primary" : "text-ink-soft hover:text-ink",
-                )}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        }
-      />
+      <PageHeader title="Dashboard" sub="How the shop is doing today, and how it's trending." />
       <StaleNote stale={stale} />
       {error && !data && <Empty>{error}</Empty>}
+
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold">Today so far</h2>
+        {t && <span className="text-xs text-ink-faint">Compared with yesterday and last {fmtDate(t.date).split(" ")[0]} up to {fmtClock(pkTime(t.asOf))}</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Sales" value={rs(t?.today.revenue)} sub={t && <Compare k="revenue" t={t} extra={`${t.today.salesCount} sales`} />} />
+        <Stat label="Cash" value={rs(t?.today.cash)} sub={t && <Compare k="cash" t={t} />} />
+        <Stat label="Online" value={rs(t?.today.online)} sub={t && <Compare k="online" t={t} />} />
+        <Stat label="Profit" value={rs(t?.today.grossProfit)} sub={t && <Compare k="grossProfit" t={t} extra="before costs" />} />
+      </div>
+
+      <div className="mt-8 mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Trends</h2>
+          <p className="text-xs text-ink-faint">Profit uses FIFO cost: the oldest stock is counted as sold first.</p>
+        </div>
+        <div className="flex rounded-lg border border-line bg-surface p-0.5">
+          {RANGES.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setRange(r.id)}
+              className={cx(
+                "rounded-md px-3 py-1.5 text-sm font-medium",
+                range === r.id ? "bg-primary-soft text-primary" : "text-ink-soft hover:text-ink",
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Revenue" value={rs(s?.revenue)} sub={`${s?.salesCount ?? 0} sales · ${s?.voidedCount ?? 0} voided`} />
@@ -152,6 +186,22 @@ export default function StatsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** "+12% vs yesterday · −3% vs last week", compared at the same time of day. */
+function Compare({ k, t, extra }: { k: keyof DaySoFar; t: Stats["today"]; extra?: ReactNode }) {
+  const now = t.today[k];
+  const delta = (before: number) => {
+    if (!before) return now ? <span className="text-primary">new</span> : <span>—</span>;
+    const pct = Math.round(((now - before) / Math.abs(before)) * 100);
+    return <span className={cx(pct > 0 ? "text-primary" : pct < 0 ? "text-destructive" : "")}>{pct > 0 ? "+" : pct < 0 ? "−" : ""}{Math.abs(pct)}%</span>;
+  };
+  return (
+    <span className="tabular-nums">
+      {extra && <>{extra} · </>}
+      {delta(t.yesterday[k])} vs yesterday · {delta(t.lastWeek[k])} vs last week
+    </span>
   );
 }
 

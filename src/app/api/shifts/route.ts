@@ -1,37 +1,19 @@
-import { desc, eq, isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { getDb, t } from "@/db";
 import { requireUser, route } from "@/lib/server/api";
+import { periodFromQuery, shiftsForPeriod } from "@/lib/server/reports";
 import { closeOverdueShifts } from "@/lib/server/shifts";
 
-// Shift history, newest first, plus who is on the counter right now.
+// Counter shifts in a PKT period (?from=&to=; default the last 7 days), each set
+// against its planned duty slot, plus who is on the counter right now.
 export const GET = route(async (req) => {
   await requireUser();
-  const limit = Math.min(Math.max(Number(new URL(req.url).searchParams.get("limit")) || 100, 1), 500);
   const db = await getDb();
   await closeOverdueShifts(db);
-  const rows = await db
-    .select({
-      id: t.shifts.id,
-      userId: t.shifts.userId,
-      name: t.users.name,
-      startedAt: t.shifts.startedAt,
-      endedAt: t.shifts.endedAt,
-    })
-    .from(t.shifts)
-    .innerJoin(t.users, eq(t.users.id, t.shifts.userId))
-    .orderBy(desc(t.shifts.startedAt))
-    .limit(limit);
-  const open = await db
+  const onCounter = await db
     .select({ userId: t.shifts.userId, name: t.users.name, startedAt: t.shifts.startedAt })
     .from(t.shifts)
     .innerJoin(t.users, eq(t.users.id, t.shifts.userId))
     .where(isNull(t.shifts.endedAt));
-  const now = Date.now();
-  return {
-    shifts: rows.map((s) => ({
-      ...s,
-      minutes: Math.round(((s.endedAt?.getTime() ?? now) - s.startedAt.getTime()) / 60000),
-    })),
-    onCounter: open,
-  };
+  return { ...(await shiftsForPeriod(db, periodFromQuery(new URL(req.url).searchParams, 7))), onCounter };
 });

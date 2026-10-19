@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Khaapa",
     short_name: "Khaapa",
     description: "Counter, stock and shifts for the Khaapa tuck shop at SEECS, NUST H-12.",
-    start_url: "/pos",
+    start_url: "/home",
     scope: "/",
     display: "standalone",
     background_color: "#ffffff",

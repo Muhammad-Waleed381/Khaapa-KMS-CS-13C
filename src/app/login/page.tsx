@@ -9,7 +9,7 @@ import { Button, Card, Input } from "@/components/ui";
 const DEV_LOGIN = process.env.NEXT_PUBLIC_DEV_LOGIN === "1";
 
 export default function LoginPage() {
-  const [next, setNext] = useState("/pos");
+  const [next, setNext] = useState("/home");
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
 
