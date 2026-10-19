@@ -111,6 +111,9 @@ export const sales = pgTable(
     change: integer("change"),
     oversold: boolean("oversold").notNull().default(false),
     preorderId: uuid("preorder_id"),
+    // Online sales: the payment account that received the money (null for cash,
+    // and for sales recorded before accounts existed).
+    accountId: uuid("account_id"),
     voided: boolean("voided").notNull().default(false),
     voidReason: text("void_reason"),
     voidedBy: uuid("voided_by"),
@@ -186,6 +189,8 @@ export const preorders = pgTable(
     status: text("status", { enum: PREORDER_STATUSES }).notNull().default("awaiting_payment"),
     paymentRef: text("payment_ref"),
     proof: text("proof"),
+    // The account the customer was asked to pay into.
+    accountId: uuid("account_id"),
     saleId: uuid("sale_id"),
     updatedBy: uuid("updated_by"),
     createdAt: createdAt(),
@@ -195,6 +200,10 @@ export const preorders = pgTable(
 
 export const shareholders = pgTable("shareholders", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Set when the holding came from an approved purchase request; null for
+  // holdings an admin entered by hand.
+  userId: uuid("user_id"),
+  purchaseId: uuid("purchase_id"),
   name: text("name").notNull(),
   contact: text("contact"),
   shares: integer("shares").notNull(),
@@ -231,3 +240,43 @@ export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),
 });
+
+// Accounts that receive online payments (NayaPay, JazzCash, Easypaisa, bank).
+// Details change over time, so old records keep pointing at the account row
+// they were paid into; deactivate an account instead of deleting it.
+export const paymentAccounts = pgTable("payment_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  label: text("label").notNull(),
+  provider: text("provider").notNull(),
+  accountTitle: text("account_title").notNull(),
+  accountNumber: text("account_number").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdBy: uuid("created_by"),
+  createdAt: createdAt(),
+});
+
+export const SHARE_PURCHASE_STATUSES = ["pending", "approved", "rejected", "cancelled"] as const;
+export type SharePurchaseStatus = (typeof SHARE_PURCHASE_STATUSES)[number];
+
+// A request to buy shares. The price is copied from the share settings when the
+// request is made, so later price changes never alter it. Approving one creates
+// a shareholders row.
+export const sharePurchases = pgTable(
+  "share_purchases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    shares: integer("shares").notNull(),
+    pricePerShare: integer("price_per_share").notNull(),
+    total: integer("total").notNull(),
+    accountId: uuid("account_id"),
+    paymentRef: text("payment_ref"),
+    proof: text("proof"),
+    status: text("status", { enum: SHARE_PURCHASE_STATUSES }).notNull().default("pending"),
+    note: text("note"),
+    decidedBy: uuid("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("share_purchases_user_idx").on(t.userId)],
+);

@@ -1,6 +1,7 @@
 import type { IconName } from "@/components/icons";
 
 export const NAV: { href: string; label: string; icon: IconName; admin?: boolean }[] = [
+  { href: "/stats", label: "Dashboard", icon: "stats", admin: true },
   { href: "/pos", label: "Counter", icon: "counter" },
   { href: "/items", label: "Items", icon: "items" },
   { href: "/sales", label: "Sales", icon: "sales" },
@@ -8,8 +9,7 @@ export const NAV: { href: string; label: string; icon: IconName; admin?: boolean
   { href: "/schedule", label: "Schedule", icon: "schedule" },
   { href: "/shifts", label: "Shifts", icon: "shifts" },
   { href: "/report", label: "Day report", icon: "report" },
-  { href: "/stats", label: "Stats", icon: "stats" },
-  { href: "/shares", label: "Shares", icon: "shares", admin: true },
+  { href: "/shares", label: "Shares", icon: "shares" },
   { href: "/activity", label: "Activity", icon: "activity" },
   { href: "/team", label: "Team", icon: "team", admin: true },
   { href: "/settings", label: "Settings", icon: "settings", admin: true },
