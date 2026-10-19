@@ -114,7 +114,7 @@ export function MyAvailability() {
                         <button
                           aria-label="Remove"
                           onClick={() => remove(w.id)}
-                          className="rounded p-1 text-ink-faint hover:bg-surface hover:text-red-600"
+                          className="rounded p-1 text-ink-faint hover:bg-surface hover:text-destructive"
                         >
                           <Icon name="x" className="size-3.5" />
                         </button>

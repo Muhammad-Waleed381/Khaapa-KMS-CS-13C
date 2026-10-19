@@ -29,7 +29,7 @@ export function OnDuty({ slots, className }: { slots: DutySlotRow[]; className?:
   const { current, next } = dutyAt(slots, now);
 
   return (
-    <div className={cx("rounded-lg bg-muted px-3 py-2 text-xs", className)}>
+    <div className={cx("rounded-2xl bg-muted px-3 py-2.5 text-xs", className)}>
       <div className="font-medium text-ink-faint">On duty now</div>
       {current.length ? (
         <ul className="mt-1 space-y-0.5">

@@ -66,6 +66,8 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Video streams in byte ranges; partial responses can't be cached, so let the browser handle it.
+  if (request.destination === "video" || request.headers.has("range")) return;
 
   if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/api/img/") || url.pathname.startsWith("/icons/")) {
     event.respondWith(cacheFirst(request, STATIC));

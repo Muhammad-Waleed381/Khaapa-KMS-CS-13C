@@ -1,52 +1,252 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-/* Design tokens. Use the Tailwind names (bg-surface, text-ink-soft, border-line,
-   bg-accent, …) instead of raw colors so light and dark both work. */
+/* Dark mode is a class on <html>, set by next-themes: the device setting by
+   default, or whatever the visitor picked with the theme switch. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Khaapa SEECS palette: bone paper, chocolate ink, rate-board green.
+   shadcn components read the standard names (background, primary, …); the
+   app also uses the older aliases (bg-surface, text-ink-soft, border-line)
+   mapped onto the same variables in @theme below. */
 :root {
-  --bg: #f6f5f2;
-  --surface: #ffffff;
-  --muted: #efede8;
-  --line: #e4e1da;
-  --ink: #1c1917;
-  --ink-soft: #57534e;
-  --ink-faint: #a8a29e;
-  --accent: #d9480f;
-  --accent-soft: #fff1e8;
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #3d6b34;
+  --primary-foreground: #ffffff;
+  --primary-soft: #dbe5d3;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --faint: #a1a1aa;
+  --accent: #f4f4f5;
+  --accent-foreground: #0a0a0a;
+  --destructive: #b42318;
+  --warn: #9a5b05;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --ring: #3d6b34;
+  --chart-1: #3d6b34;
+  --chart-2: #737373;
+  --chart-3: #0a0a0a;
+  --chart-4: #a3b896;
+  --chart-5: #d4d4d4;
+  --radius: 0.5rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #3d6b34;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #3d6b34;
+
+  /* Public site stationery: the page is the shop's printed rate list. */
+  --pub-ground: #0a0a0a;
+  --pub-ground-ink: #ffffff;
+  --pub-paper: #ffffff;
+  --pub-paper-ink: #0a0a0a;
+  --pub-paper-soft: #71717a;
+  --pub-green: #3d6b34;
+  --pub-green-ink: #ffffff;
+  --pub-green-deep: #2f5428;
+  --pub-bone: #f4f4f5;
+  --pub-tan: #d4d4d8;
+  --pub-clay: #52525b;
+  --pub-clay-ink: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #121110;
-    --surface: #1c1a18;
-    --muted: #292624;
-    --line: #34302d;
-    --ink: #f5f5f4;
-    --ink-soft: #c4bfba;
-    --ink-faint: #78716c;
-    --accent: #fb7a3c;
-    --accent-soft: #3a2116;
-  }
+.dark {
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #fafafa;
+  --card: #0a0a0a;
+  --card-foreground: #fafafa;
+  --popover: #0a0a0a;
+  --popover-foreground: #fafafa;
+  --primary: #84b872;
+  --primary-foreground: #13200f;
+  --primary-soft: #26341f;
+  --secondary: #171717;
+  --secondary-foreground: #fafafa;
+  --muted: #171717;
+  --muted-foreground: #a1a1aa;
+  --faint: #71717a;
+  --accent: #171717;
+  --accent-foreground: #fafafa;
+  --destructive: #f2786d;
+  --warn: #e6a945;
+  --border: #262626;
+  --input: #333333;
+  --ring: #84b872;
+  --chart-1: #84b872;
+  --chart-2: #a3a3a3;
+  --chart-3: #fafafa;
+  --chart-4: #4e6b43;
+  --chart-5: #404040;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #84b872;
+  --sidebar-primary-foreground: #13200f;
+  --sidebar-accent: #171717;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #262626;
+  --sidebar-ring: #84b872;
+
+  --pub-ground: #000000;
+  --pub-ground-ink: #fafafa;
+  --pub-paper: #141414;
+  --pub-paper-ink: #fafafa;
+  --pub-paper-soft: #a1a1aa;
+  --pub-green: #2f5428;
+  --pub-green-ink: #fafafa;
+  --pub-green-deep: #22401d;
+  --pub-bone: #171717;
+  --pub-tan: #262626;
+  --pub-clay: #404040;
+  --pub-clay-ink: #fafafa;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
+  --font-sans: var(--font-helvetica), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-archivo), var(--font-helvetica), sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
-  --color-ink-faint: var(--ink-faint);
+  --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-warn: var(--warn);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Older app aliases, kept so existing pages read the new palette. */
+  --color-bg: var(--background);
+  --color-surface: var(--card);
+  --color-line: var(--border);
+  --color-ink: var(--foreground);
+  --color-ink-soft: var(--muted-foreground);
+  --color-ink-faint: var(--faint);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+  @keyframes marquee {
+  from {
+    transform: translateX(0);
+    }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+    }
+  }
+  @keyframes marquee-vertical {
+  from {
+    transform: translateY(0);
+    }
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+    }
+  }
 }
 
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  -webkit-tap-highlight-color: transparent;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+
+/* The display face is a condensed grotesque (Archivo at its narrowest width): always caps, set tight. */
+@utility font-display {
+  font-family: var(--font-archivo), sans-serif;
+  font-weight: 800;
+  font-stretch: 62%;
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 0.9;
+}
+
+/* Paper edges for the public site's printed objects (rate list, letter,
+   footer card): a row of semicircles bitten out of the edge, via a mask. */
+@utility edge-scallop {
+  --s: 12px;
+  mask:
+    radial-gradient(var(--s) at 50% 0, #0000 98%, #000) 50% 0 / calc(var(--s) * 2.6) 51% repeat-x,
+    radial-gradient(var(--s) at 50% 100%, #0000 98%, #000) 50% 100% / calc(var(--s) * 2.6) 51% repeat-x;
+}
+@utility edge-scallop-top {
+  --s: 12px;
+  mask:
+    radial-gradient(var(--s) at 50% 0, #0000 98%, #000) 50% 0 / calc(var(--s) * 2.6) 51% repeat-x,
+    linear-gradient(#000 0 0) 0 100% / 100% 50% no-repeat;
+}
+@utility edge-scallop-bottom {
+  --s: 12px;
+  mask:
+    linear-gradient(#000 0 0) 0 0 / 100% 50% no-repeat,
+    radial-gradient(var(--s) at 50% 100%, #0000 98%, #000) 50% 100% / calc(var(--s) * 2.6) 51% repeat-x;
+}
+
+/* The coupon: two semicircular notches where the perforation runs. Upright
+   on phones (notches left and right), sideways from md up (top and bottom). */
+@utility coupon-notch {
+  --n: 14px;
+  mask:
+    radial-gradient(var(--n) at 0 var(--cut, 46%), #0000 98%, #000) 0 0 / 51% 100% no-repeat,
+    radial-gradient(var(--n) at 100% var(--cut, 46%), #0000 98%, #000) 100% 0 / 51% 100% no-repeat;
+  @variant md {
+    mask:
+      radial-gradient(var(--n) at var(--cut, 46%) 0, #0000 98%, #000) 0 0 / 100% 51% no-repeat,
+      radial-gradient(var(--n) at var(--cut, 46%) 100%, #0000 98%, #000) 0 100% / 100% 51% no-repeat;
+  }
 }
 
 @keyframes rise {
@@ -57,4 +257,23 @@ body {
 }
 .rise {
   animation: rise 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
+/* The theme switch's ripple: the new theme is revealed in a growing circle from
+   the button (AnimatedThemeToggler drives the clip-path on the new snapshot). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+:root[data-magicui-theme-vt="active"]::view-transition-group(root) {
+  animation-duration: var(--magicui-theme-toggle-vt-duration);
+}
+/* Starts collapsed so Firefox doesn't flash the whole new theme before the animation begins. */
+:root[data-magicui-theme-vt="active"]::view-transition-new(root) {
+  clip-path: var(--magicui-theme-vt-clip-from);
 }

@@ -45,7 +45,7 @@ export default function SchedulePage() {
             onClick={() => setTab(t.id)}
             className={cx(
               "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition",
-              tab === t.id ? "border-accent text-accent" : "border-transparent text-ink-soft hover:text-ink",
+              tab === t.id ? "border-primary text-primary" : "border-transparent text-ink-soft hover:text-ink",
             )}
           >
             {t.label}
@@ -179,11 +179,11 @@ function WeekView({
             key={date}
             className={cx(
               "min-h-40 rounded-xl border p-2",
-              date === today ? "border-accent bg-accent-soft/40" : "border-line bg-surface",
+              date === today ? "border-primary bg-primary-soft/40" : "border-line bg-surface",
             )}
           >
             <div className="mb-2 px-1">
-              <div className={cx("text-xs font-semibold", date === today ? "text-accent" : "text-ink-soft")}>
+              <div className={cx("text-xs font-semibold", date === today ? "text-primary" : "text-ink-soft")}>
                 {WEEKDAYS[i]}
               </div>
               <div className="text-xs text-ink-faint">{fmtDate(date).split(", ").pop()}</div>
@@ -203,8 +203,8 @@ function WeekView({
         {dates.map((date) => {
           const list = slots.filter((s) => s.date === date);
           return (
-            <Card key={date} className={cx("p-3", date === today && "border-accent")}>
-              <div className={cx("mb-2 text-sm font-semibold", date === today && "text-accent")}>
+            <Card key={date} className={cx("p-3", date === today && "border-primary")}>
+              <div className={cx("mb-2 text-sm font-semibold", date === today && "text-primary")}>
                 {fmtDate(date)}
                 {date === today && " · Today"}
               </div>
@@ -244,11 +244,11 @@ function SlotCard({ slot, mine, onClick }: { slot: Slot; mine: boolean; onClick?
       disabled={!onClick}
       className={cx(
         "block w-full rounded-lg border px-2 py-1.5 text-left transition disabled:cursor-default",
-        mine ? "border-accent/40 bg-accent-soft" : "border-line bg-muted/60",
-        onClick && "hover:border-accent",
+        mine ? "border-primary/40 bg-primary-soft" : "border-line bg-muted/60",
+        onClick && "hover:border-primary",
       )}
     >
-      <div className={cx("truncate text-sm font-medium", mine && "text-accent")}>
+      <div className={cx("truncate text-sm font-medium", mine && "text-primary")}>
         {slot.name}
         {mine && " (you)"}
       </div>

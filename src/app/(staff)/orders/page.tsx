@@ -85,7 +85,7 @@ export default function OrdersPage() {
                 onClick={() => setDate(d)}
                 className={cx(
                   "rounded-md px-3 py-1 text-sm font-medium",
-                  date === d ? "bg-accent-soft text-accent" : "text-ink-soft hover:text-ink",
+                  date === d ? "bg-primary-soft text-primary" : "text-ink-soft hover:text-ink",
                 )}
               >
                 {["Yesterday", "Today", "Tomorrow"][i]}
@@ -103,7 +103,7 @@ export default function OrdersPage() {
             onClick={() => setFilter(f)}
             className={cx(
               "shrink-0 rounded-full border px-3 py-1 text-xs font-medium",
-              f === filter ? "border-accent bg-accent text-white" : "border-line bg-surface text-ink-soft hover:text-ink",
+              f === filter ? "border-primary bg-primary text-primary-foreground" : "border-line bg-surface text-ink-soft hover:text-ink",
             )}
           >
             {f === "all" ? `All ${orders.length}` : `${STATUS_LABEL[f]} ${count(f)}`}
@@ -128,7 +128,7 @@ export default function OrdersPage() {
                     <Badge tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status]}</Badge>
                   </div>
                   <div className="mt-0.5 truncate text-sm font-medium">{o.customerName}</div>
-                  <a href={`tel:${o.phone}`} className="text-xs text-ink-soft hover:text-accent">
+                  <a href={`tel:${o.phone}`} className="text-xs text-ink-soft hover:text-primary">
                     {o.phone}
                   </a>
                 </div>
@@ -155,7 +155,7 @@ export default function OrdersPage() {
                   <>
                     NayaPay ref <span className="font-mono font-medium text-ink select-all">{o.paymentRef}</span>
                     {o.hasProof && (
-                      <button onClick={() => setProofOf(o)} className="ml-2 text-accent hover:underline">
+                      <button onClick={() => setProofOf(o)} className="ml-2 text-primary hover:underline">
                         View screenshot
                       </button>
                     )}

@@ -98,7 +98,7 @@ export default function ItemsPage() {
               className={cx(
                 "whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition",
                 category === c
-                  ? "border-accent bg-accent text-white"
+                  ? "border-primary bg-primary text-primary-foreground"
                   : "border-line bg-surface text-ink-soft hover:text-ink",
               )}
             >
@@ -178,7 +178,7 @@ function ItemRow({ item: i, onClick }: { item: Item; onClick: () => void }) {
           ) : (
             <>
               Buy {rs(i.lastUnitCost)} ·{" "}
-              <span className={cx(profit !== null && profit < 0 && "text-red-600")}>profit {rs(profit)}/unit</span>
+              <span className={cx(profit !== null && profit < 0 && "text-destructive")}>profit {rs(profit)}/unit</span>
             </>
           )}
         </div>

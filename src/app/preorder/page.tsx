@@ -106,7 +106,7 @@ export default function PreorderPage() {
                   onClick={() => setDate(d.date)}
                   className={cx(
                     "rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
-                    chosen === d.date ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-ink-faint",
+                    chosen === d.date ? "border-primary bg-primary-soft" : "border-line bg-surface hover:border-ink-faint",
                   )}
                 >
                   <div className="text-sm font-semibold">{i === 0 ? "Today" : "Tomorrow"}</div>

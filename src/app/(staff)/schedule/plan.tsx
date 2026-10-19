@@ -78,8 +78,8 @@ export function PlanWeek({ week, slots, onSaved }: { week: string; slots: Slot[]
       </Card>
 
       {weekDrafts.length > 0 && (
-        <div className="sticky top-14 z-30 flex items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent-soft p-3 md:top-2">
-          <div className="text-sm font-medium text-accent">
+        <div className="sticky top-14 z-30 flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary-soft p-3 md:top-2">
+          <div className="text-sm font-medium text-primary">
             {weekDrafts.length} new slot{weekDrafts.length > 1 ? "s" : ""} not saved yet
           </div>
           <div className="flex gap-2">
@@ -178,7 +178,7 @@ function DayPlan({
                   key={w.id}
                   onClick={() => onAdd({ userId: w.userId, date, start: w.start, end: w.end, note: "" })}
                   title={w.note ?? "Click to assign this window"}
-                  className="rounded-md border border-line bg-muted px-2 py-1 text-left text-xs hover:border-accent hover:bg-accent-soft"
+                  className="rounded-md border border-line bg-muted px-2 py-1 text-left text-xs hover:border-primary hover:bg-primary-soft"
                 >
                   <span className="font-medium">{w.name}</span>{" "}
                   <span className="tabular-nums text-ink-soft">
@@ -196,7 +196,7 @@ function DayPlan({
             <ul className="space-y-1">
               {slots.map((s) => (
                 <li key={s.id} className="flex items-center gap-2 text-sm">
-                  <Icon name="check" className="size-3.5 text-emerald-600" />
+                  <Icon name="check" className="size-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span className="font-medium">{s.name}</span>
                   <span className="tabular-nums text-ink-soft">
                     {fmtClock(s.start)}–{fmtClock(s.end)}
@@ -205,7 +205,7 @@ function DayPlan({
                 </li>
               ))}
               {drafts.map((d) => (
-                <li key={d.key} className="flex items-center gap-2 text-sm text-accent">
+                <li key={d.key} className="flex items-center gap-2 text-sm text-primary">
                   <Icon name="plus" className="size-3.5" />
                   <span className="font-medium">{nameOf(d.userId)}</span>
                   <span className="tabular-nums">
@@ -215,7 +215,7 @@ function DayPlan({
                   <button
                     aria-label="Remove draft"
                     onClick={() => onRemove(d.key)}
-                    className="ml-auto rounded p-0.5 text-ink-faint hover:text-red-600"
+                    className="ml-auto rounded p-0.5 text-ink-faint hover:text-destructive"
                   >
                     <Icon name="x" className="size-3.5" />
                   </button>

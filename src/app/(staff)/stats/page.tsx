@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Badge, Card, cx, Empty, PageHeader, StaleNote, Stat } from "@/components/ui";
+import { CashierBoard } from "@/components/cashier-board";
 import { useApi } from "@/lib/client/api";
 import { rs } from "@/lib/money";
 import { fmtDate } from "@/lib/time";
@@ -55,7 +56,7 @@ export default function StatsPage() {
                 onClick={() => setRange(r.id)}
                 className={cx(
                   "rounded-md px-3 py-1.5 text-sm font-medium",
-                  range === r.id ? "bg-accent-soft text-accent" : "text-ink-soft hover:text-ink",
+                  range === r.id ? "bg-primary-soft text-primary" : "text-ink-soft hover:text-ink",
                 )}
               >
                 {r.label}
@@ -80,14 +81,14 @@ export default function StatsPage() {
 
       {data && range !== "today" && data.daily.length > 0 && (
         <Card className="mt-4 p-4">
-          <ChartHead title="Daily revenue and profit" legend={[["bg-accent", "Revenue"], ["bg-ink-soft", "Profit"]]} />
+          <ChartHead title="Daily revenue and profit" legend={[["bg-primary", "Revenue"], ["bg-ink-soft", "Profit"]]} />
           <DailyBars daily={data.daily} />
         </Card>
       )}
 
       {data && (
         <Card className="mt-4 p-4">
-          <ChartHead title="Sales by hour" legend={[["bg-accent", "Revenue"]]} />
+          <ChartHead title="Sales by hour" legend={[["bg-primary", "Revenue"]]} />
           <HourlyBars hourly={data.hourly} />
         </Card>
       )}
@@ -123,30 +124,11 @@ export default function StatsPage() {
 
         <div className="space-y-4">
           <Card className="p-4">
-            <h2 className="mb-3 text-sm font-semibold">By cashier</h2>
+            <h2 className="mb-4 text-sm font-semibold">By cashier</h2>
             {data && !data.byCashier.length ? (
               <p className="text-sm text-ink-faint">No sales yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-ink-faint">
-                  <tr>
-                    <th className="pb-2 font-medium">Name</th>
-                    <th className="pb-2 text-right font-medium">Sales</th>
-                    <th className="pb-2 text-right font-medium">Cash</th>
-                    <th className="pb-2 text-right font-medium">Online</th>
-                  </tr>
-                </thead>
-                <tbody className="tabular-nums">
-                  {data?.byCashier.map((c) => (
-                    <tr key={c.userId} className="border-t border-line">
-                      <td className="py-1.5">{c.name}</td>
-                      <td className="py-1.5 text-right">{c.count}</td>
-                      <td className="py-1.5 text-right">{rs(c.cash)}</td>
-                      <td className="py-1.5 text-right">{rs(c.online)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              data && <CashierBoard rows={data.byCashier} />
             )}
           </Card>
 
@@ -201,7 +183,7 @@ function DailyBars({ daily }: { daily: Stats["daily"] }) {
             className="group flex h-full flex-1 items-end gap-px"
             title={`${fmtDate(d.day)}: ${rs(d.revenue)} revenue, ${rs(d.profit)} profit`}
           >
-            <div className="flex-1 rounded-t-sm bg-accent" style={{ height: `${(d.revenue / max) * 100}%` }} />
+            <div className="flex-1 rounded-t-sm bg-primary" style={{ height: `${(d.revenue / max) * 100}%` }} />
             <div
               className="flex-1 rounded-t-sm bg-ink-soft"
               style={{ height: `${(Math.max(d.profit, 0) / max) * 100}%` }}
@@ -232,7 +214,7 @@ function HourlyBars({ hourly }: { hourly: Stats["hourly"] }) {
       <div className="flex h-32 items-end gap-1">
         {hours.map((h) => (
           <div key={h.hour} className="flex h-full flex-1 items-end" title={`${h.hour}:00 — ${rs(h.revenue)}, ${h.count} sales`}>
-            <div className="w-full rounded-t-sm bg-accent" style={{ height: `${(h.revenue / max) * 100}%` }} />
+            <div className="w-full rounded-t-sm bg-primary" style={{ height: `${(h.revenue / max) * 100}%` }} />
           </div>
         ))}
       </div>

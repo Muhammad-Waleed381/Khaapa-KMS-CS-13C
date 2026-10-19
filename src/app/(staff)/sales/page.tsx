@@ -144,7 +144,7 @@ export default function SalesPage() {
                           <td className="py-0.5">
                             {l.qty}× {l.name}
                             {l.oversold > 0 && (
-                              <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-400">{l.oversold} oversold</span>
+                              <span className="ml-1.5 text-xs text-warn dark:text-amber-400">{l.oversold} oversold</span>
                             )}
                           </td>
                           <td className="py-0.5 text-right tabular-nums text-ink-soft">{rs(l.unitPrice)} each</td>

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { OnDuty } from "@/components/on-duty";
 import { SyncStatus } from "@/components/sync-status";
+import { ThemeToggle } from "@/components/theme";
 import { toast } from "@/components/toast";
 import { Button, cx, Spinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
@@ -89,8 +90,8 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
             key={n.href}
             href={n.href}
             className={cx(
-              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition",
-              active ? "bg-accent-soft text-accent" : "text-ink-soft hover:bg-muted hover:text-ink",
+              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+              active ? "bg-primary-soft text-primary" : "text-ink-soft hover:bg-muted hover:text-ink",
             )}
           >
             <Icon name={n.icon} />
@@ -102,8 +103,8 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
   );
 
   const userBox = (
-    <div className="flex items-center gap-2 border-t border-line pt-3">
-      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+    <div className="flex items-center gap-2 rounded-2xl bg-muted/60 p-2">
+      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
         {me.user.name.slice(0, 1).toUpperCase()}
       </div>
       <div className="min-w-0 flex-1">
@@ -116,7 +117,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
           localStorage.removeItem(ME_KEY);
           signOut({ redirectTo: "/login" });
         }}
-        className="rounded-md p-2 text-ink-faint hover:bg-muted hover:text-ink"
+        className="rounded-xl p-2 text-ink-faint transition hover:bg-background hover:text-ink"
       >
         <Icon name="logout" />
       </button>
@@ -126,10 +127,18 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
   return (
     <MeContext.Provider value={{ me, reload }}>
       <div className="min-h-dvh md:flex">
-        <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 flex-col gap-4 border-r border-line bg-surface p-3 md:flex">
-          <Link href="/" className="px-2.5 pt-1 text-lg font-bold tracking-tight">
-            Khaapa<span className="text-accent">.</span>
-          </Link>
+        <aside className="sticky top-3 m-3 hidden h-[calc(100dvh-1.5rem)] w-56 shrink-0 flex-col gap-4 rounded-3xl border border-line bg-surface p-3 shadow-xl shadow-black/5 md:flex">
+          <div className="flex items-center justify-between pt-1 pl-1.5">
+            <Link href="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight">
+              <span className="grid size-8 place-items-center rounded-xl bg-primary font-display text-base text-primary-foreground">
+                K
+              </span>
+              <span>
+                Khaapa<span className="text-primary">.</span>
+              </span>
+            </Link>
+            <ThemeToggle className="text-ink-faint hover:bg-muted hover:text-ink" />
+          </div>
           <div className="flex-1 overflow-y-auto">{navList}</div>
           <OnDuty slots={slots} />
           <SyncStatus />
@@ -138,10 +147,11 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
 
         <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-2.5 backdrop-blur md:hidden">
           <Link href="/" className="text-lg font-bold tracking-tight">
-            Khaapa<span className="text-accent">.</span>
+            Khaapa<span className="text-primary">.</span>
           </Link>
           <div className="flex items-center gap-2">
             <SyncStatus />
+            <ThemeToggle className="size-9 text-ink-soft hover:bg-muted hover:text-ink" />
             <button onClick={() => setMenuOpen(true)} className="rounded-md p-2 hover:bg-muted" aria-label="Menu">
               <Icon name="menu" className="size-5" />
             </button>
@@ -151,7 +161,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
         {menuOpen && (
           <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={() => setMenuOpen(false)}>
             <div
-              className="rise absolute inset-y-0 right-0 flex w-64 flex-col gap-4 bg-surface p-3"
+              className="rise absolute inset-y-2 right-2 flex w-64 flex-col gap-4 rounded-3xl border border-line bg-surface p-3 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex-1 overflow-y-auto pt-2">{navList}</div>
@@ -172,7 +182,7 @@ function Pending({ me }: { me: Me }) {
     <div className="grid min-h-dvh place-items-center p-6">
       <div className="max-w-sm text-center">
         <div className="text-lg font-bold">
-          Khaapa<span className="text-accent">.</span>
+          Khaapa<span className="text-primary">.</span>
         </div>
         <h1 className="mt-6 text-xl font-semibold">
           {me.user.status === "disabled" ? "Your account is disabled" : "Waiting for approval"}

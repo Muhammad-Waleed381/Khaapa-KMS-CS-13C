@@ -99,7 +99,7 @@ export function ItemDialog({
           Sells for <b className="text-ink">{rs(item.price)}</b>
         </span>
         <span>
-          In stock <b className={cx(item.stock <= item.lowStockAt ? "text-red-600" : "text-ink")}>{item.stock}</b>
+          In stock <b className={cx(item.stock <= item.lowStockAt ? "text-destructive" : "text-ink")}>{item.stock}</b>
         </span>
         {item.owed > 0 && <Badge tone="bad">Oversold {item.owed}</Badge>}
         {!item.active && <Badge>Archived</Badge>}
@@ -199,7 +199,7 @@ function RestockForm({ onSubmit }: { onSubmit: (b: object) => Promise<boolean> }
         </Field>
       </div>
       <div className="flex items-center justify-between gap-2 text-xs">
-        <button type="button" className="font-medium text-accent" onClick={() => setMode(mode === "total" ? "unit" : "total")}>
+        <button type="button" className="font-medium text-primary" onClick={() => setMode(mode === "total" ? "unit" : "total")}>
           {mode === "total" ? "Enter cost per unit instead" : "Enter total paid instead"}
         </button>
         {unit !== null && <span className="text-ink-soft">= {rs(Math.round(unit))} per unit</span>}
@@ -334,7 +334,7 @@ function History({ moves, lots }: { moves: Move[]; lots: Lot[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={KIND[m.kind].tone}>{KIND[m.kind].label}</Badge>
                     {m.qty !== 0 && (
-                      <span className={cx("font-medium tabular-nums", m.qty > 0 ? "text-emerald-600" : "text-ink")}>
+                      <span className={cx("font-medium tabular-nums", m.qty > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-ink")}>
                         {m.qty > 0 ? "+" : ""}
                         {m.qty}
                       </span>

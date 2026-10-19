@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { ThemeToggle } from "@/components/theme";
 import { Button, Card, Input } from "@/components/ui";
 
 const DEV_LOGIN = process.env.NEXT_PUBLIC_DEV_LOGIN === "1";
@@ -20,10 +21,11 @@ export default function LoginPage() {
   }, []);
 
   return (
-    <div className="grid min-h-dvh place-items-center p-4">
+    <div className="relative grid min-h-dvh place-items-center p-4">
+      <ThemeToggle className="absolute top-4 right-4 size-9 text-ink-soft hover:bg-muted hover:text-ink" />
       <Card className="w-full max-w-sm p-6">
         <Link href="/" className="text-2xl font-bold tracking-tight">
-          Khaapa<span className="text-accent">.</span>
+          Khaapa<span className="text-primary">.</span>
         </Link>
         <h1 className="mt-4 text-lg font-semibold">Staff sign in</h1>
         <p className="mt-1 text-sm text-ink-soft">

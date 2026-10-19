@@ -74,7 +74,7 @@ export default function ActivityPage() {
             onClick={() => setKind(k.id)}
             className={cx(
               "rounded-full border px-3 py-1 text-xs font-medium",
-              kind === k.id ? "border-accent bg-accent-soft text-accent" : "border-line bg-surface text-ink-soft hover:text-ink",
+              kind === k.id ? "border-primary bg-primary-soft text-primary" : "border-line bg-surface text-ink-soft hover:text-ink",
             )}
           >
             {k.label}

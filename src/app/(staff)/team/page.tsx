@@ -173,7 +173,7 @@ export default function TeamPage() {
 
 function Avatar({ u }: { u: TeamUser }) {
   return (
-    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
       {u.name.slice(0, 1).toUpperCase()}
     </div>
   );

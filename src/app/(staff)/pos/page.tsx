@@ -67,7 +67,7 @@ function StartShift({ me }: { me: ReturnType<typeof useMe> }) {
   return (
     <div className="mx-auto max-w-md pt-6 md:pt-16">
       <Card className="p-6">
-        <div className="grid size-11 place-items-center rounded-full bg-accent-soft text-accent">
+        <div className="grid size-11 place-items-center rounded-full bg-primary-soft text-primary">
           <Icon name="shifts" className="size-6" />
         </div>
         <h1 className="mt-4 text-lg font-semibold">Start your shift?</h1>
@@ -79,7 +79,7 @@ function StartShift({ me }: { me: ReturnType<typeof useMe> }) {
             "Everything you do is logged under your name",
           ].map((x) => (
             <li key={x} className="flex gap-2">
-              <Icon name="check" className="mt-0.5 size-4 shrink-0 text-accent" />
+              <Icon name="check" className="mt-0.5 size-4 shrink-0 text-primary" />
               {x}
             </li>
           ))}
@@ -240,7 +240,7 @@ function Counter({
                   className={cx(
                     "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition",
                     category === c
-                      ? "border-accent bg-accent text-white"
+                      ? "border-primary bg-primary text-primary-foreground"
                       : "border-line bg-surface text-ink-soft hover:text-ink",
                   )}
                 >
@@ -267,7 +267,7 @@ function Counter({
       {count > 0 && (
         <button
           onClick={() => setCartOpen(true)}
-          className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-between rounded-xl bg-accent px-4 py-3.5 text-white shadow-lg lg:hidden"
+          className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-between rounded-xl bg-primary px-4 py-3.5 text-primary-foreground shadow-lg lg:hidden"
         >
           <span className="text-sm font-medium">
             {count} item{count > 1 ? "s" : ""} · Checkout
@@ -311,7 +311,7 @@ function Counter({
         <p className="text-sm text-ink-soft">
           You started at {fmtClock(pkTime(shift.startedAt))}. You&apos;ll need to start a new shift to sell again.
         </p>
-        {cart.length > 0 && <p className="mt-2 text-sm text-amber-700">The current cart will be cleared.</p>}
+        {cart.length > 0 && <p className="mt-2 text-sm text-warn">The current cart will be cleared.</p>}
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={() => setEndOpen(false)}>Cancel</Button>
           <Button
@@ -403,7 +403,7 @@ function ItemTile({ item, qty, onAdd }: { item: CachedItem; qty: number; onAdd: 
       onClick={onAdd}
       className={cx(
         "group relative flex flex-col overflow-hidden rounded-xl border bg-surface text-left transition active:scale-[.97]",
-        qty > 0 ? "border-accent ring-2 ring-accent/20" : "border-line hover:border-ink-faint",
+        qty > 0 ? "border-primary ring-2 ring-primary/20" : "border-line hover:border-ink-faint",
       )}
     >
       <div className="relative aspect-[4/3] w-full bg-muted">
@@ -421,7 +421,7 @@ function ItemTile({ item, qty, onAdd }: { item: CachedItem; qty: number; onAdd: 
           </div>
         )}
         {qty > 0 && (
-          <span className="absolute right-2 top-2 grid min-w-6 place-items-center rounded-full bg-accent px-1.5 text-xs font-bold text-white">
+          <span className="absolute right-2 top-2 grid min-w-6 place-items-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">
             {qty}
           </span>
         )}
@@ -481,7 +481,7 @@ function CartPanel({
       <div className="flex items-center justify-between px-5 pb-2 pt-4">
         <h2 className="text-sm font-semibold">Current sale</h2>
         {cart.length > 0 && (
-          <button onClick={onClear} className="text-xs text-ink-faint hover:text-red-600">
+          <button onClick={onClear} className="text-xs text-ink-faint hover:text-destructive">
             Clear
           </button>
         )}
@@ -629,7 +629,7 @@ function RecentSales({ open, onClose }: { open: boolean; onClose: () => void }) 
                 <div className="text-sm font-semibold tabular-nums">{rs(s.total)}</div>
                 {s.status === "pending" && (
                   <button
-                    className="mt-1 text-xs text-red-600 hover:underline"
+                    className="mt-1 text-xs text-destructive hover:underline"
                     onClick={async () => {
                       await cancelPendingSale(s.id);
                       toast("Sale cancelled");
@@ -639,7 +639,7 @@ function RecentSales({ open, onClose }: { open: boolean; onClose: () => void }) 
                   </button>
                 )}
                 {s.status === "failed" && (
-                  <button className="mt-1 text-xs text-accent hover:underline" onClick={() => retryFailed()}>
+                  <button className="mt-1 text-xs text-primary hover:underline" onClick={() => retryFailed()}>
                     Retry
                   </button>
                 )}

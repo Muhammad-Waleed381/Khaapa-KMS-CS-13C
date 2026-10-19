@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local embedded database
 /.data
+
+# design skill working files
+.taste-skill/

@@ -70,7 +70,7 @@ export default function ShiftsPage() {
             <Card className="divide-y divide-line">
               {shifts.map((s) => (
                 <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
                     {s.name.slice(0, 1).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">

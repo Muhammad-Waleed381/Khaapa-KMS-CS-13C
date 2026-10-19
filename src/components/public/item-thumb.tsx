@@ -8,7 +8,7 @@ export function ItemThumb({ name, image, className }: { name: string; image: str
   return (
     <div
       aria-hidden
-      className={cx("grid place-items-center rounded-lg bg-accent-soft font-semibold text-accent", className)}
+      className={cx("grid place-items-center rounded-lg bg-primary-soft font-semibold text-primary", className)}
     >
       {name.slice(0, 1).toUpperCase()}
     </div>

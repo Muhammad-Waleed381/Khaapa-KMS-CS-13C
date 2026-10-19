@@ -112,7 +112,7 @@ export default function SharesPage() {
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat
               label="Net profit"
-              value={<span className={d.summary.netProfit < 0 ? "text-red-600" : ""}>{rs(d.summary.netProfit)}</span>}
+              value={<span className={d.summary.netProfit < 0 ? "text-destructive" : ""}>{rs(d.summary.netProfit)}</span>}
               sub={periodLabel(period)}
             />
             <Stat
@@ -194,7 +194,7 @@ function PeriodPicker({ period, onChange }: { period: Period; onChange: (p: Peri
             onClick={() => pick(tab.kind)}
             className={cx(
               "rounded-md px-3 py-1.5 text-sm font-medium transition",
-              period.kind === tab.kind ? "bg-accent-soft text-accent" : "text-ink-soft hover:text-ink",
+              period.kind === tab.kind ? "bg-primary-soft text-primary" : "text-ink-soft hover:text-ink",
             )}
           >
             {tab.label}
@@ -367,7 +367,7 @@ function Shareholders({
                     <td className="px-4 py-2.5 text-right tabular-nums">{h.shares}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{pct(h.ownership)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{rs(h.invested)}</td>
-                    <td className={cx("px-4 py-2.5 text-right tabular-nums", h.profitShare < 0 && "text-red-600")}>
+                    <td className={cx("px-4 py-2.5 text-right tabular-nums", h.profitShare < 0 && "text-destructive")}>
                       {rs(h.profitShare)}
                       {h.returnPct !== null && (
                         <div className="text-xs text-ink-faint">{pct(h.returnPct)} return</div>
@@ -409,7 +409,7 @@ function Mini({ label, value, strong, tone }: { label: string; value: string; st
   return (
     <div>
       <dt className="text-xs text-ink-faint">{label}</dt>
-      <dd className={cx("tabular-nums", strong && "font-semibold", tone === "bad" && "text-red-600")}>{value}</dd>
+      <dd className={cx("tabular-nums", strong && "font-semibold", tone === "bad" && "text-destructive")}>{value}</dd>
     </div>
   );
 }
@@ -461,7 +461,7 @@ function Costs({
                   <div className="text-xs text-ink-faint">{fmtDate(c.date)}</div>
                 </div>
                 <div className="text-sm font-medium tabular-nums">{rs(c.amount)}</div>
-                <button onClick={() => remove(c)} className="rounded-md p-1.5 text-ink-faint hover:bg-muted hover:text-red-600" aria-label="Delete cost">
+                <button onClick={() => remove(c)} className="rounded-md p-1.5 text-ink-faint hover:bg-muted hover:text-destructive" aria-label="Delete cost">
                   <Icon name="trash" />
                 </button>
               </li>
