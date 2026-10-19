@@ -39,7 +39,8 @@ const shiftStartOp = z.object({
 const shiftEndOp = z.object({
   id: z.uuid(),
   type: z.literal("shift_end"),
-  payload: z.object({ id: z.uuid(), endedAt: z.iso.datetime({ offset: true }) }),
+  // auto: the device closed it because the person's duty slot ended.
+  payload: z.object({ id: z.uuid(), endedAt: z.iso.datetime({ offset: true }), auto: z.boolean().optional() }),
 });
 
 const body = z.object({ ops: z.array(z.unknown()).max(100) });
@@ -102,7 +103,14 @@ async function apply(tx: Tx, user: User, o: z.infer<typeof op>): Promise<Omit<Re
     .set({ endedAt: endedAt < shift.startedAt ? shift.startedAt : endedAt })
     .where(eq(t.shifts.id, p.id));
   const mins = Math.max(0, Math.round((endedAt.getTime() - shift.startedAt.getTime()) / 60000));
-  await logActivity(tx, user.id, "shift", `Ended a shift (${Math.floor(mins / 60)}h ${mins % 60}m)`, p.id);
+  const length = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  await logActivity(
+    tx,
+    user.id,
+    "shift",
+    p.auto ? `Shift ended automatically at the end of the duty slot (${length})` : `Ended a shift (${length})`,
+    p.id,
+  );
   return { ok: true };
 }
 

@@ -3,7 +3,7 @@
 import { liveQuery } from "dexie";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, ApiError } from "../api";
-import { db, setMeta, type CachedItem, type LocalSale, type OutboxOp, type SalePayload } from "./db";
+import { db, setMeta, type CachedItem, type LocalSale, type OutboxOp, type SalePayload, type ShiftPayload } from "./db";
 
 // Outbox sync: every counter write is queued in IndexedDB first, then
 // uploaded in order to POST /api/sync. Ops are idempotent on their id, so a
@@ -140,7 +140,7 @@ export async function queueSale(sale: SalePayload) {
   void pruneSales();
 }
 
-export async function queueShift(type: "shift_start" | "shift_end", payload: { id: string; startedAt?: string; endedAt?: string }) {
+export async function queueShift(type: "shift_start" | "shift_end", payload: ShiftPayload) {
   await enqueue({ id: crypto.randomUUID(), type, payload });
 }
 

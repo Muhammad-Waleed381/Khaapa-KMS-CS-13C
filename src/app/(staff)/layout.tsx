@@ -5,13 +5,19 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
+import { OnDuty } from "@/components/on-duty";
 import { SyncStatus } from "@/components/sync-status";
+import { toast } from "@/components/toast";
 import { Button, cx, Spinner } from "@/components/ui";
 import { api, ApiError } from "@/lib/client/api";
-import { MeContext, type Me } from "@/lib/client/me";
+import { MeContext, type DutySlotRow, type Me } from "@/lib/client/me";
+import { useShiftAutoEnd } from "@/lib/client/offline/shift";
+import { syncNow } from "@/lib/client/offline/sync";
+import { fmtClock } from "@/lib/time";
 import { NAV } from "./nav";
 
 const ME_KEY = "khaapa:me";
+const NO_SLOTS: DutySlotRow[] = [];
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -42,6 +48,22 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
     if (cached) setMe(JSON.parse(cached));
     reload();
   }, [reload]);
+
+  // Pick up schedule edits and the next day's slots while the app stays open.
+  useEffect(() => {
+    const timer = setInterval(reload, 5 * 60_000);
+    return () => clearInterval(timer);
+  }, [reload]);
+
+  const slots = me?.slots ?? NO_SLOTS;
+  const onShiftAutoEnded = useCallback(
+    (end: string) => {
+      toast(`Your duty slot ended at ${fmtClock(end)}, so your shift was closed`);
+      syncNow().then(reload);
+    },
+    [reload],
+  );
+  useShiftAutoEnd(me?.user.id ?? "", slots, onShiftAutoEnded);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMenuOpen(false), [pathname]);
@@ -109,6 +131,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
             Khaapa<span className="text-accent">.</span>
           </Link>
           <div className="flex-1 overflow-y-auto">{navList}</div>
+          <OnDuty slots={slots} />
           <SyncStatus />
           {userBox}
         </aside>
@@ -132,6 +155,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex-1 overflow-y-auto pt-2">{navList}</div>
+              <OnDuty slots={slots} />
               {userBox}
             </div>
           </div>

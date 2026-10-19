@@ -30,7 +30,7 @@ export type SalePayload = {
   lines: SaleLine[];
 };
 
-export type ShiftPayload = { id: string; startedAt?: string; endedAt?: string };
+export type ShiftPayload = { id: string; startedAt?: string; endedAt?: string; auto?: boolean };
 
 export type OutboxOp =
   | { seq?: number; id: string; type: "sale"; payload: SalePayload; createdAt: string; tries: number; failed: boolean; lastError: string | null }

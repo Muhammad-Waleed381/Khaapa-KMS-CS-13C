@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { DutySlot } from "@/lib/duty";
 
 export type Me = {
   user: {
@@ -13,7 +14,11 @@ export type Me = {
   };
   shift: { id: string; userId: string; startedAt: string; endedAt: string | null } | null;
   onCounter: { userId: string; name: string; startedAt: string }[];
+  /** Everyone's duty slots from yesterday to tomorrow. Missing in a /api/me cached by an older version. */
+  slots?: DutySlotRow[];
 };
+
+export type DutySlotRow = DutySlot & { name: string };
 
 export const MeContext = createContext<{ me: Me; reload: () => Promise<void> } | null>(null);
 
@@ -21,5 +26,5 @@ export const MeContext = createContext<{ me: Me; reload: () => Promise<void> } |
 export function useMe() {
   const ctx = useContext(MeContext);
   if (!ctx) throw new Error("useMe outside staff layout");
-  return { ...ctx.me, isAdmin: ctx.me.user.role === "admin", reload: ctx.reload };
+  return { ...ctx.me, slots: ctx.me.slots ?? [], isAdmin: ctx.me.user.role === "admin", reload: ctx.reload };
 }

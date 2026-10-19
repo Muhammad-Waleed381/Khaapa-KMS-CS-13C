@@ -1,12 +1,14 @@
 import { desc, eq, isNull } from "drizzle-orm";
 import { getDb, t } from "@/db";
 import { requireUser, route } from "@/lib/server/api";
+import { closeOverdueShifts } from "@/lib/server/shifts";
 
 // Shift history, newest first, plus who is on the counter right now.
 export const GET = route(async (req) => {
   await requireUser();
   const limit = Math.min(Math.max(Number(new URL(req.url).searchParams.get("limit")) || 100, 1), 500);
   const db = await getDb();
+  await closeOverdueShifts(db);
   const rows = await db
     .select({
       id: t.shifts.id,

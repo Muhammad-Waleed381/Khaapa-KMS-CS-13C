@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb, t } from "@/db";
 import type { PreorderStatus } from "@/db/schema";
 import { HttpError, logActivity, parseBody, requireUser, route } from "@/lib/server/api";
+import { closeOverdueShifts } from "@/lib/server/shifts";
 import { recordSale } from "@/lib/server/stock";
 
 const Body = z.object({ status: z.enum(["paid", "ready", "collected", "cancelled"]) });
@@ -32,6 +33,8 @@ export const POST = route<{ id: string }>(async (req, { params }) => {
   const { id } = await params;
   const { status } = await parseBody(req, Body);
   const db = await getDb();
+  // So a collected order isn't filed under a shift whose duty slot already ended.
+  if (status === "collected") await closeOverdueShifts(db);
 
   return db.transaction(async (tx) => {
     const [order] = await tx.select().from(t.preorders).where(eq(t.preorders.id, id)).for("update");

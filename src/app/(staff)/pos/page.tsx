@@ -6,7 +6,8 @@ import { Icon } from "@/components/icons";
 import { toast } from "@/components/toast";
 import { useMe } from "@/lib/client/me";
 import { db, type CachedItem, type LocalSale } from "@/lib/client/offline/db";
-import { adoptShift, endShift, startShift, useLocalShift, type LocalShift } from "@/lib/client/offline/shift";
+import { OnDuty } from "@/components/on-duty";
+import { adoptShift, endShift, holdShift, startShift, useLocalShift, type LocalShift } from "@/lib/client/offline/shift";
 import {
   cancelPendingSale,
   queueSale,
@@ -17,6 +18,7 @@ import {
   useLive,
   useSyncState,
 } from "@/lib/client/offline/sync";
+import { slotForShift } from "@/lib/duty";
 import { rs, toPaisa } from "@/lib/money";
 import { fmtClock, pkDate, pkTime } from "@/lib/time";
 
@@ -55,7 +57,8 @@ export default function PosPage() {
         )}
       </div>
     );
-  return <Counter items={items} shift={shift} onShiftChange={me.reload} />;
+  const slot = slotForShift(shift, me.slots);
+  return <Counter items={items} shift={shift} slotEnd={slot?.end ?? null} onShiftChange={me.reload} />;
 }
 
 function StartShift({ me }: { me: ReturnType<typeof useMe> }) {
@@ -81,8 +84,9 @@ function StartShift({ me }: { me: ReturnType<typeof useMe> }) {
             </li>
           ))}
         </ul>
+        <OnDuty slots={me.slots} className="mt-4" />
         {others.length > 0 && (
-          <p className="mt-4 rounded-md bg-muted px-3 py-2 text-xs text-ink-soft">
+          <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-ink-soft">
             On the counter now: {others.map((o) => o.name).join(", ")}
           </p>
         )}
@@ -108,10 +112,12 @@ function StartShift({ me }: { me: ReturnType<typeof useMe> }) {
 function Counter({
   items,
   shift,
+  slotEnd,
   onShiftChange,
 }: {
   items: CachedItem[];
   shift: LocalShift;
+  slotEnd: string | null;
   onShiftChange: () => Promise<void>;
 }) {
   const [cart, setCart] = useState<Line[]>([]);
@@ -134,6 +140,12 @@ function Counter({
   const inCart = (id: string) => cart.find((l) => l.itemId === id)?.qty ?? 0;
   const total = cart.reduce((s, l) => s + l.qty * l.unitPrice, 0);
   const count = cart.reduce((s, l) => s + l.qty, 0);
+
+  // A sale in progress keeps the shift open past the end of the duty slot.
+  useEffect(() => {
+    holdShift(cart.length > 0);
+    return () => holdShift(false);
+  }, [cart.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -199,7 +211,7 @@ function Counter({
   return (
     <div className="-mx-4 -my-5 md:-mx-8 md:-my-7 lg:flex lg:h-dvh">
       <div className="min-w-0 flex-1 px-4 py-4 pb-28 md:px-6 lg:overflow-y-auto lg:pb-6">
-        <CounterHeader shift={shift} onRecent={() => setRecentOpen(true)} onEnd={() => setEndOpen(true)} />
+        <CounterHeader shift={shift} slotEnd={slotEnd} onRecent={() => setRecentOpen(true)} onEnd={() => setEndOpen(true)} />
 
         <div className="sticky top-[52px] z-10 -mx-1 mb-3 space-y-2 bg-bg/95 px-1 py-2 backdrop-blur md:top-0">
           <div className="relative">
@@ -340,13 +352,26 @@ function useTodayTotals() {
   );
 }
 
-function CounterHeader({ shift, onRecent, onEnd }: { shift: LocalShift; onRecent: () => void; onEnd: () => void }) {
+function CounterHeader({
+  shift,
+  slotEnd,
+  onRecent,
+  onEnd,
+}: {
+  shift: LocalShift;
+  slotEnd: string | null;
+  onRecent: () => void;
+  onEnd: () => void;
+}) {
   const totals = useTodayTotals();
   return (
     <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Counter</h1>
-        <p className="text-xs text-ink-soft">On shift since {fmtClock(pkTime(shift.startedAt))}</p>
+        <p className="text-xs text-ink-soft">
+          On shift since {fmtClock(pkTime(shift.startedAt))}
+          {slotEnd && ` · ends automatically at ${fmtClock(slotEnd)}`}
+        </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-3 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs tabular-nums">
