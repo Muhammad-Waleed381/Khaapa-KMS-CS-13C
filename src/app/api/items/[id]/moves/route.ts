@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, max, min, sql } from "drizzle-orm";
 import { getDb, t } from "@/db";
 import { requireUser, route } from "@/lib/server/api";
 import { getItemOr404 } from "../../shared";
 
-// Recent stock history plus the FIFO batches still on the shelf (oldest first).
+// Recent stock history, the FIFO batches still on the shelf (oldest first),
+// every batch ever bought (newest first) and the prices it has sold at.
 export const GET = route<{ id: string }>(async (req, { params }) => {
   await requireUser();
   const { id } = await params;
@@ -44,5 +45,32 @@ export const GET = route<{ id: string }>(async (req, { params }) => {
     .where(and(eq(t.lots.itemId, id), gt(t.lots.qtyLeft, 0)))
     .orderBy(asc(t.lots.createdAt), asc(t.lots.id));
 
-  return { moves, lots };
+  const batches = await db
+    .select({
+      id: t.lots.id,
+      qtyIn: t.lots.qtyIn,
+      qtyLeft: t.lots.qtyLeft,
+      unitCost: t.lots.unitCost,
+      supplier: t.lots.supplier,
+      createdAt: t.lots.createdAt,
+    })
+    .from(t.lots)
+    .where(eq(t.lots.itemId, id))
+    .orderBy(desc(t.lots.createdAt), desc(t.lots.id))
+    .limit(50);
+
+  const prices = await db
+    .select({
+      unitPrice: t.saleLines.unitPrice,
+      first: min(t.sales.createdAt),
+      last: max(t.sales.createdAt),
+      qty: sql<number>`sum(${t.saleLines.qty})::int`,
+    })
+    .from(t.saleLines)
+    .innerJoin(t.sales, eq(t.sales.id, t.saleLines.saleId))
+    .where(and(eq(t.saleLines.itemId, id), eq(t.sales.voided, false)))
+    .groupBy(t.saleLines.unitPrice)
+    .orderBy(desc(max(t.sales.createdAt)));
+
+  return { moves, lots, batches, prices };
 });

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "@/components/toast";
 import { Button, Field, Input } from "@/components/ui";
 import { api } from "@/lib/client/api";
-import { toPaisa, toRupees } from "@/lib/money";
+import { rs, toPaisa, toRupees } from "@/lib/money";
 import { compressImage, imgSrc, type Item } from "./types";
 
 /** Create (no `item`) or edit an item's details. */
@@ -25,6 +25,14 @@ export function ItemForm({
   // undefined = unchanged, null = removed, string = new photo
   const [image, setImage] = useState<string | null | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  // Opening stock (new items only): the first batch and what was paid for it.
+  const [qty, setQty] = useState("");
+  const [costMode, setCostMode] = useState<"total" | "unit">("total");
+  const [cost, setCost] = useState("");
+  const [supplier, setSupplier] = useState("");
+  const q = Math.floor(Number(qty)) || 0;
+  const c = Number(cost);
+  const unit = q > 0 && cost !== "" && c >= 0 ? (costMode === "total" ? toPaisa(c) / q : toPaisa(c)) : null;
 
   const preview = image === undefined ? (item?.hasImage ? imgSrc(item) : null) : image;
 
@@ -32,6 +40,7 @@ export function ItemForm({
     e.preventDefault();
     const p = Number(price);
     if (!name.trim() || !Number.isFinite(p) || p < 0) return toast("Enter a name and a price", "bad");
+    if (!item && q > 0 && unit === null) return toast("Enter what you paid for the opening stock", "bad");
     setSaving(true);
     try {
       const body = {
@@ -41,6 +50,15 @@ export function ItemForm({
         lowStockAt: Math.max(0, Math.floor(Number(lowStockAt) || 0)),
         preorder,
         ...(image !== undefined ? { image } : {}),
+        ...(!item && q > 0
+          ? {
+              openingStock: {
+                qty: q,
+                ...(costMode === "total" ? { totalCost: toPaisa(c) } : { unitCost: toPaisa(c) }),
+                supplier: supplier.trim() || null,
+              },
+            }
+          : {}),
       };
       const res = item
         ? await api<{ item: Item }>(`/api/items/${item.id}`, { method: "PATCH", body })
@@ -114,6 +132,34 @@ export function ItemForm({
         <input type="checkbox" checked={preorder} onChange={(e) => setPreorder(e.target.checked)} className="size-4 accent-accent" />
         Available for pre-order
       </label>
+      {!item && (
+        <fieldset className="space-y-3 rounded-lg border border-line p-3">
+          <legend className="px-1 text-xs font-medium text-ink-soft">Opening stock (optional)</legend>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Quantity">
+              <Input type="number" inputMode="numeric" min={0} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+            </Field>
+            <Field label={costMode === "total" ? "Total paid (Rs)" : "Buy price per unit (Rs)"}>
+              <Input type="number" inputMode="decimal" min={0} step="any" value={cost} onChange={(e) => setCost(e.target.value)} />
+            </Field>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <button type="button" className="font-medium text-primary" onClick={() => setCostMode(costMode === "total" ? "unit" : "total")}>
+              {costMode === "total" ? "Enter price per unit instead" : "Enter total paid instead"}
+            </button>
+            {unit !== null && (
+              <span className="text-ink-soft">
+                = {rs(Math.round(unit))} per unit
+                {Number(price) > 0 && ` · profit ${rs(toPaisa(Number(price)) - Math.round(unit))}/unit`}
+              </span>
+            )}
+          </div>
+          <Field label="Supplier (optional)">
+            <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Metro" />
+          </Field>
+          <p className="text-xs text-ink-faint">Later purchases go in the item&apos;s Restock tab, each with its own price.</p>
+        </fieldset>
+      )}
       <Button variant="primary" className="w-full" disabled={saving}>
         {saving ? "Saving…" : item ? "Save changes" : "Add item"}
       </Button>

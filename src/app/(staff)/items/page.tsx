@@ -174,17 +174,20 @@ function ItemRow({ item: i, onClick }: { item: Item; onClick: () => void }) {
         </div>
         <div className="truncate text-xs text-ink-soft">
           {i.lastUnitCost === null ? (
-            "No buy price yet"
+            "No buy price yet. Restock to add one"
           ) : (
             <>
-              Buy {rs(i.lastUnitCost)} ·{" "}
+              Bought at {rs(i.lastUnitCost)} (latest batch) ·{" "}
               <span className={cx(profit !== null && profit < 0 && "text-destructive")}>profit {rs(profit)}/unit</span>
             </>
           )}
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="font-semibold tabular-nums">{rs(i.price)}</div>
+        <div className="font-semibold tabular-nums">
+          <span className="mr-1 text-xs font-normal text-ink-faint">Sells</span>
+          {rs(i.price)}
+        </div>
         <div className="mt-0.5 flex justify-end gap-1">
           {i.owed > 0 ? (
             <Badge tone="bad">Oversold {i.owed}</Badge>

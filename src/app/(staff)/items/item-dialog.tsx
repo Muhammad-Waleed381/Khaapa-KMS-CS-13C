@@ -10,7 +10,7 @@ import { fmtDateTime } from "@/lib/time";
 import { ItemForm } from "./item-form";
 import { type Item } from "./types";
 
-type Tab = "restock" | "waste" | "count" | "history" | "edit";
+type Tab = "restock" | "waste" | "count" | "prices" | "history" | "edit";
 
 type Move = {
   id: string;
@@ -25,6 +25,8 @@ type Move = {
   userName: string | null;
 };
 type Lot = { id: string; qtyIn: number; qtyLeft: number; unitCost: number; supplier: string | null; createdAt: string };
+type PricePoint = { unitPrice: number; first: string; last: string; qty: number };
+type HistoryData = { moves: Move[]; lots: Lot[]; batches: Lot[]; prices: PricePoint[] };
 
 const KIND: Record<Move["kind"], { label: string; tone: Tone }> = {
   restock: { label: "Restock", tone: "good" },
@@ -48,7 +50,9 @@ export function ItemDialog({
 }) {
   const [tab, setTab] = useState<Tab>("restock");
   const { isAdmin } = useMe();
-  const history = useApi<{ moves: Move[]; lots: Lot[] }>(tab === "history" ? `/api/items/${item.id}/moves?limit=30` : null);
+  const history = useApi<HistoryData>(
+    tab === "history" || tab === "prices" ? `/api/items/${item.id}/moves?limit=30` : null,
+  );
 
   async function stockAction(body: object) {
     try {
@@ -88,6 +92,7 @@ export function ItemDialog({
     ["restock", "Restock"],
     ["waste", "Waste"],
     ["count", "Count"],
+    ["prices", "Prices"],
     ["history", "History"],
     ["edit", "Edit"],
   ];
@@ -123,11 +128,13 @@ export function ItemDialog({
       {tab === "restock" && <RestockForm onSubmit={stockAction} />}
       {tab === "waste" && <WasteForm stock={item.stock} onSubmit={stockAction} />}
       {tab === "count" && <CountForm stock={item.stock} onSubmit={stockAction} />}
-      {tab === "history" &&
+      {(tab === "history" || tab === "prices") &&
         (!history.data ? (
           <div className="grid place-items-center py-8">
             <Spinner />
           </div>
+        ) : tab === "prices" ? (
+          <Prices item={item} batches={history.data.batches ?? []} prices={history.data.prices ?? []} />
         ) : (
           <History moves={history.data.moves} lots={history.data.lots} />
         ))}
@@ -355,6 +362,66 @@ function History({ moves, lots }: { moves: Move[]; lots: Lot[] }) {
             ))}
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+/** Every batch bought and every price it sold at, so price changes are easy to follow. */
+function Prices({ item, batches, prices }: { item: Item; batches: Lot[]; prices: PricePoint[] }) {
+  // The oldest batch with stock left is the one sales draw from next.
+  const sellingNow = [...batches].reverse().find((b) => b.qtyLeft > 0)?.id;
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-ink-soft">
+        Each batch keeps the price you paid. Sales use the oldest batch first, and each sale keeps the price it was
+        sold at, so changing prices never changes past profit.
+      </p>
+      <section>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Batches bought</h4>
+        {batches.length === 0 ? (
+          <Empty>No stock bought yet. Use Restock to add a batch with its buy price.</Empty>
+        ) : (
+          <div className="divide-y divide-line rounded-lg border border-line">
+            {batches.map((b) => (
+              <div key={b.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium tabular-nums">{rs(b.unitCost)} each</span>
+                    <span className="text-ink-soft">
+                      bought {b.qtyIn}, {b.qtyLeft} left
+                    </span>
+                    {b.id === sellingNow && <Badge tone="accent">Selling now</Badge>}
+                    {b.qtyLeft === 0 && <Badge>Sold out</Badge>}
+                  </div>
+                  {b.supplier && <div className="truncate text-xs text-ink-soft">{b.supplier}</div>}
+                </div>
+                <div className="shrink-0 text-right text-xs text-ink-faint">{fmtDateTime(b.createdAt)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      <section>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Sell prices</h4>
+        <div className="divide-y divide-line rounded-lg border border-line">
+          <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+            <span>
+              <span className="font-medium">{rs(item.price)}</span> <span className="text-ink-soft">current price</span>
+            </span>
+          </div>
+          {prices.map((p) => (
+            <div key={p.unitPrice} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span>
+                <span className="font-medium tabular-nums">{rs(p.unitPrice)}</span>{" "}
+                <span className="text-ink-soft">{p.qty} sold</span>
+              </span>
+              <span className="text-right text-xs text-ink-faint">
+                {fmtDateTime(p.first)} – {fmtDateTime(p.last)}
+              </span>
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   );
