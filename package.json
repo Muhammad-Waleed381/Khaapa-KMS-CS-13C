@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
-    "seed:reference": "node scripts/import-reference.mjs"
+    "seed:reference": "node scripts/import-reference.mjs",
+    "seed:demo": "node --no-warnings --env-file-if-exists=.env.local scripts/seed-demo.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.10",

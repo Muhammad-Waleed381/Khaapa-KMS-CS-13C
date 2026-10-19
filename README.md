@@ -36,6 +36,11 @@ npm run seed:reference -- --demo-stock  # also stock to test the counter (buy pr
 
 It is safe to re-run, because items that already exist are skipped. Leave out `--demo-stock` for real data.
 
+For a demo that looks like the shop has been running for a while, `npm run seed:demo` writes six weeks of history directly into the database in `DATABASE_URL` (or local PGlite). That includes the menu and photos, staff, availability and duty slots, shifts, cash and online sales, restocks at changing buy prices (FIFO), waste, shelf counts, voids, oversells, pre-orders, shareholders, costs and the activity log.
+
+- It refuses to run on a database that already has items or sales. `npm run seed:demo -- --wipe` empties **every** table first, including real data.
+- Demo staff use `@demo.khaapa.invalid` emails, which can never sign in.
+
 ## Deploy for free (Vercel + Neon)
 
 1. Push the repo to GitHub and import it in Vercel.
