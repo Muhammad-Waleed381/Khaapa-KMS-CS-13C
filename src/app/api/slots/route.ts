@@ -4,8 +4,9 @@ import { HttpError, logActivity, parseBody, requireUser, route } from "@/lib/ser
 import { fmtClock, fmtDate } from "@/lib/time";
 import { isoDate, slotBody, slotColumns } from "../schedule/shared";
 
+// Members only ever see their own duties; HR (admins) see everyone's.
 export const GET = route(async (req) => {
-  await requireUser();
+  const user = await requireUser();
   const q = new URL(req.url).searchParams;
   const from = q.get("from");
   const to = q.get("to");
@@ -16,7 +17,13 @@ export const GET = route(async (req) => {
     .select(slotColumns)
     .from(t.slots)
     .innerJoin(t.users, eq(t.users.id, t.slots.userId))
-    .where(and(gte(t.slots.date, from), lte(t.slots.date, to)))
+    .where(
+      and(
+        gte(t.slots.date, from),
+        lte(t.slots.date, to),
+        user.role === "admin" ? undefined : eq(t.slots.userId, user.id),
+      ),
+    )
     .orderBy(asc(t.slots.date), asc(t.slots.start));
   return { slots };
 });

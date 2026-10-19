@@ -8,14 +8,42 @@ import { api, useApi } from "@/lib/client/api";
 import { useMe } from "@/lib/client/me";
 import { addDays, fmtClock, fmtDate, pkDate, pkTime, weekStart, WEEKDAYS } from "@/lib/time";
 import { MyAvailability } from "./availability";
+import { MyDuties } from "./duties";
+import { AllAvailability } from "./overview";
 import { PlanWeek } from "./plan";
 import { weekDates, type Person, type Slot } from "./types";
 
-type Tab = "schedule" | "availability" | "plan";
+type Tab = "duties" | "mine" | "timetable" | "everyone" | "plan";
 
+const TABS: Record<Tab, { label: string; intro: string }> = {
+  duties: {
+    label: "My duties",
+    intro: "When you're on counter duty this week and next. Your counter shift ends automatically at the end of each duty.",
+  },
+  mine: {
+    label: "My availability",
+    intro: "Tell HR when you're usually free each week. HR uses this to plan duties.",
+  },
+  timetable: {
+    label: "Timetable",
+    intro: "Who is on counter duty and when. Counter shifts end automatically at the end of a duty slot. Click a slot to change it.",
+  },
+  everyone: {
+    label: "Availability",
+    intro: "When each person said they're free. Ask everyone for times before planning a new week.",
+  },
+  plan: {
+    label: "Plan week",
+    intro: "Assign who works the counter when for the whole week, then Save all. People's availability is shown so you can pick someone who's free.",
+  },
+};
+
+// Members only see their own duties; HR (admins) see and plan everyone's.
 export default function SchedulePage() {
   const { isAdmin } = useMe();
-  const [tab, setTab] = useState<Tab>("schedule");
+  const tabs: Tab[] = isAdmin ? ["timetable", "everyone", "plan", "mine"] : ["duties", "mine"];
+  const [picked, setTab] = useState<Tab | null>(null);
+  const tab = picked && tabs.includes(picked) ? picked : tabs[0];
   const [today, setToday] = useState<string | null>(null);
   const [week, setWeek] = useState<string | null>(null);
 
@@ -26,44 +54,46 @@ export default function SchedulePage() {
     setWeek(weekStart(d));
   }, []);
 
-  const slotsApi = useApi<{ slots: Slot[] }>(week ? `/api/slots?from=${week}&to=${addDays(week, 6)}` : null);
-
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "schedule", label: "Schedule" },
-    { id: "availability", label: "My availability" },
-    ...(isAdmin ? [{ id: "plan" as const, label: "Plan week" }] : []),
-  ];
+  const weekly = tab === "timetable" || tab === "plan";
+  const slotsApi = useApi<{ slots: Slot[] }>(
+    weekly && week ? `/api/slots?from=${week}&to=${addDays(week, 6)}` : null,
+  );
 
   return (
     <div>
-      <PageHeader title="Schedule" sub="Who's on, and when. Times are Pakistan time." />
+      <PageHeader title="Schedule" sub="Counter duty. Times are Pakistan time." />
 
-      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-line">
-        {tabs.map((t) => (
+      <div className="mb-3 flex gap-1 overflow-x-auto border-b border-line">
+        {tabs.map((id) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={id}
+            onClick={() => setTab(id)}
             className={cx(
               "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition",
-              tab === t.id ? "border-primary text-primary" : "border-transparent text-ink-soft hover:text-ink",
+              tab === id ? "border-primary text-primary" : "border-transparent text-ink-soft hover:text-ink",
             )}
           >
-            {t.label}
+            {TABS[id].label}
           </button>
         ))}
       </div>
+      <p className="mb-4 max-w-2xl text-sm text-ink-soft">{TABS[tab].intro}</p>
 
-      {tab === "availability" ? (
+      {tab === "mine" ? (
         <MyAvailability />
+      ) : tab === "everyone" ? (
+        <AllAvailability />
       ) : !week || !today ? (
         <div className="grid place-items-center py-16">
           <Spinner />
         </div>
+      ) : tab === "duties" ? (
+        <MyDuties today={today} />
       ) : (
         <>
           <WeekNav week={week} today={today} onChange={setWeek} />
           <StaleNote stale={slotsApi.stale} />
-          {tab === "schedule" ? (
+          {tab === "timetable" ? (
             <WeekView week={week} today={today} slots={slotsApi.data?.slots ?? []} reload={slotsApi.reload} />
           ) : (
             <PlanWeek week={week} slots={slotsApi.data?.slots ?? []} onSaved={slotsApi.reload} />
