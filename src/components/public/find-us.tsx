@@ -38,7 +38,7 @@ export function FindUs({ shop }: { shop?: ShopSettings }) {
               <br />
               the counter?
             </h2>
-            <p className="max-w-[34ch]">{loc?.label ?? "K2 Block, NUST H-12"}</p>
+            <p className="max-w-[34ch]">{loc?.label ?? "SEECS, NUST H-12"}</p>
           </div>
 
           {/* The perforation: a row of round dots in the ground colour. */}

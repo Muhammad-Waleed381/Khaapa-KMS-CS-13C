@@ -15,7 +15,7 @@ export type ShopSettings = {
 };
 
 export const DEFAULT_SHOP: ShopSettings = {
-  location: { lat: 33.64354, lng: 72.992593, label: "K2 Block, NUST H-12" },
+  location: { lat: 33.64314917030392, lng: 72.99074742883603, label: "SEECS, NUST H-12" },
   hours: "",
   nayapay: { name: "", handle: "", instructions: "" },
   whatsapp: "",

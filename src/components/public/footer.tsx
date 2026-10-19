@@ -33,7 +33,7 @@ export function PublicFooter({ shop }: { shop?: ShopSettings }) {
                   {loc.label}
                 </a>
               ) : (
-                "K2 Block, NUST H-12"
+                "SEECS, NUST H-12"
               )}
             </li>
             {shop?.whatsapp && (

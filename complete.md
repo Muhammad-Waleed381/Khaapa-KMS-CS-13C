@@ -4,7 +4,7 @@ Handoff for an agent continuing this project. Read the "Rules" section before yo
 
 ## 1. What this is
 
-Khaapa is a class project (Semester 7, NUST SEECS): a management system for **Khaapa**, the student-run tuck shop at K2 Block, NUST H-12, Islamabad. It sells snacks and drinks and takes cash or NayaPay.
+Khaapa is a class project (Semester 7, NUST SEECS): a management system for **Khaapa**, the student-run tuck shop at **SEECS, NUST H-12**, Islamabad. Its name is just "Khaapa" (not "K2 Khaapa"); the reference site's "K2 Block" wording does not apply. It sells snacks and drinks and takes cash or NayaPay.
 
 It recreates the intent of the live reference app at http://khaapa.deeznust.com/ as a **separate codebase**; nothing was copied from that site. v1 covers everything on the reference site except coupons/promo codes, NayaPay auto-matching and the MCP/AI connector page, which the user said to skip for now.
 
@@ -46,7 +46,7 @@ What's in and out:
 | Shares | Shareholders have a share count and purchase price. Profit is divided over all shares, and each person sees their payout plus profit. |
 | Coupons | **Not in v1.** |
 | Receipts | No customer receipts, and nothing may slow down a sale. An internal end-of-day report is shareable (WhatsApp/copy). |
-| Location | The public site has a "how far am I" check. Default coordinates come from the reference site (33.64354, 72.992593). **The user will provide the exact location**, and admins can edit it in Settings. |
+| Location | Khaapa is at **SEECS, NUST H-12**. The exact coordinates **33.64314917030392, 72.99074742883603** (given by the user) are the default in `api/public/_shop.ts`, and admins can edit them in Settings. The public site has a "how far am I" check. |
 | Scale | Small, not enterprise. |
 | Speed | The user wants maximum speed and **asked to use parallel sub-agents** for big work. |
 
@@ -263,7 +263,7 @@ How it was built: the lead agent wrote the foundation (commits 1–6), then six 
 
 ## 10. Known gaps and possible next steps
 
-- **Waiting on the user:** the exact shop coordinates, plus the real NayaPay details, opening hours and WhatsApp number (the current ones are placeholders set through `/settings`).
+- **Waiting on the user:** the real NayaPay details, opening hours and WhatsApp number (the current ones are placeholders set through `/settings`).
 - **Deferred:** coupons/promo codes, NayaPay payment matching, and the MCP/AI connector. Attendance (comparing shifts against slots) is out of scope.
 - **Auto-end edge case:** if an admin assigns a slot that has already ended to someone mid-shift, their shift closes at that slot's end (or their last sale). They start a new shift to keep selling.
 - **Vercel Hobby:** the plan is officially non-commercial, so mention this if the shop uses it long-term. Its cron is limited to once a day, so any future background job should be triggered by the app rather than on a timer.

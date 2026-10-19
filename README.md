@@ -1,6 +1,6 @@
 # Khaapa
 
-Management system for Khaapa, the student-run tuck shop at K2 Block, NUST H-12.
+Management system for Khaapa, the student-run tuck shop at SEECS, NUST H-12.
 
 - **Counter (POS):** tap items into a sale, take cash (with change) or online payment. Works offline.
 - **Inventory:** restocks at their own buy price, FIFO costing (oldest stock sold first), waste/expiry, shelf counts, low-stock alerts, oversell tracking.
