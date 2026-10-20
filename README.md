@@ -75,3 +75,5 @@ Who can get in is decided by the app, not Google. The server rejects any email o
 - **Stock** is an append-only ledger (`stock_moves`), and stock on hand is the sum of its entries. Each restock creates a *lot* with its unit cost. Sales, waste and count corrections draw from the oldest lots first (`src/lib/server/stock.ts`). Selling with an empty shelf is allowed: those units are recorded as owed and get costed when the next restock arrives.
 - **Offline:** the counter keeps items and an outbox of operations in IndexedDB. Sale IDs are generated on the device and synced through `/api/sync`, which ignores duplicates, so a sale is never counted twice. A service worker caches the app so it opens without internet.
 - **Accounts:** only `@seecs.edu.pk` Google accounts can sign in. New accounts stay pending until an admin approves them on the Team page. Every action is recorded in the activity log.
+
+Deployment commit
