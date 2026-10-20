@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { PublicHeader } from "@/components/public/header";
 import { toast } from "@/components/toast";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Button, Card, cx, Empty, Spinner } from "@/components/ui";
+import { Button, Card, cx, Empty, PageHeader, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/client/api";
 import { unitsLabel } from "@/lib/units";
 import { fmtDate, pkDate, weekStart } from "@/lib/time";
@@ -44,14 +43,15 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toUpperCase())
     .join("") || "?";
 
-export function ContributionBoard() {
+// Everyone signed in can see the board. Admins log, edit and delete entries.
+export default function ContributionPage() {
   const [preset, setPreset] = useState<Preset>("month");
   const [editing, setEditing] = useState<Entry | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const today = pkDate();
   const range = useMemo(() => rangeFor(preset, today), [preset, today]);
   const qs = new URLSearchParams(Object.entries(range).filter(([, v]) => v) as [string, string][]).toString();
-  const { data, loading, reload } = useApi<Board>(`/api/public/contributions${qs ? `?${qs}` : ""}`);
+  const { data, loading, reload } = useApi<Board>(`/api/contributions${qs ? `?${qs}` : ""}`);
 
   function openNew() {
     setEditing(null);
@@ -76,44 +76,36 @@ export function ContributionBoard() {
   const manualShare = data?.totals.units ? Math.round((data.totals.manualUnits / data.totals.units) * 100) : 0;
 
   return (
-    <>
-      <PublicHeader active="contribution" />
-      <main>
-        <section className="bg-(--pub-ground) px-5 pt-12 pb-14 text-(--pub-ground-ink) md:px-8 md:pt-20 md:pb-20">
-          <div className="mx-auto max-w-5xl">
-            <p className="text-sm font-medium opacity-70">Khaapa SEECS · the people behind the counter</p>
-            <h1 className="mt-3 font-display text-[3.25rem] leading-[0.9] md:text-[6rem]">Contribution</h1>
-            <p className="mt-5 max-w-[52ch] text-[1.0625rem] opacity-85">
-              Every counter shift counts automatically. Anything else that keeps the shop running, an admin logs here
-              in 30-minute units.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-              <div role="tablist" aria-label="Period" className="inline-flex rounded-full border border-current/25 p-1 text-sm">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    role="tab"
-                    aria-selected={preset === p.id}
-                    onClick={() => setPreset(p.id)}
-                    className={cx(
-                      "rounded-full px-4 py-1.5 font-medium transition",
-                      preset === p.id ? "bg-(--pub-ground-ink) text-(--pub-ground)" : "hover:bg-current/10",
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              {data?.canEdit && (
-                <Button variant="primary" onClick={openNew} className="rounded-full">
-                  <PlusIcon /> Log contribution
-                </Button>
-              )}
-            </div>
-          </div>
-        </section>
+    <div className="mx-auto max-w-3xl space-y-10">
+      <PageHeader
+        title="Contribution"
+        sub="Every counter shift counts automatically. Anything else that keeps the shop running, an admin logs here in 30-minute units."
+        actions={
+          data?.canEdit && (
+            <Button variant="primary" onClick={openNew}>
+              <PlusIcon /> Log contribution
+            </Button>
+          )
+        }
+      />
+      <div role="tablist" aria-label="Period" className="inline-flex rounded-full border border-line p-1 text-sm">
+        {PRESETS.map((p) => (
+          <button
+            key={p.id}
+            role="tab"
+            aria-selected={preset === p.id}
+            onClick={() => setPreset(p.id)}
+            className={cx(
+              "rounded-full px-4 py-1.5 font-medium transition",
+              preset === p.id ? "bg-primary text-primary-foreground" : "text-ink-soft hover:bg-muted hover:text-ink",
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 md:px-8 md:py-12">
+        <div className="space-y-6">
           {!data ? (
             loading ? (
               <div className="grid place-items-center py-20">
@@ -206,7 +198,6 @@ export function ContributionBoard() {
             </>
           )}
         </div>
-      </main>
 
       {data?.canEdit && data.members && (
         <EntryDialog
@@ -217,7 +208,7 @@ export function ContributionBoard() {
           onSaved={reload}
         />
       )}
-    </>
+    </div>
   );
 }
 
