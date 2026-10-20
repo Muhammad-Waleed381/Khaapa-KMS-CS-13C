@@ -15,6 +15,13 @@
       "when": 1792439803971,
       "tag": "0001_accounts_and_share_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792474682760,
+      "tag": "0002_contributions",
+      "breakpoints": true
     }
   ]
 }

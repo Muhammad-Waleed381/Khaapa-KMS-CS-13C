@@ -14,6 +14,7 @@ import {
   Users,
   Wallet,
   type LucideIcon,
+  HandHeart,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/kit";
@@ -46,6 +47,7 @@ const KINDS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: "account", label: "Accounts", icon: Wallet },
   { id: "shares", label: "Shares", icon: Coins },
   { id: "cost", label: "Costs", icon: Receipt },
+  { id: "contribution", label: "Contribution", icon: HandHeart },
   { id: "team", label: "Team", icon: Users },
   { id: "settings", label: "Settings", icon: Settings },
 ];

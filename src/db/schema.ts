@@ -223,6 +223,22 @@ export const costs = pgTable("costs", {
   createdAt: createdAt(),
 });
 
+// Work logged by hand, in 30-minute units (1 unit = 30 min, 2 = 1 h). Counter
+// shifts are not stored here: their units are worked out from the shift times.
+export const contributions = pgTable(
+  "contributions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id),
+    date: date("date").notNull(),
+    units: smallint("units").notNull(),
+    note: text("note").notNull().default(""),
+    createdBy: uuid("created_by"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("contributions_date_idx").on(t.date), index("contributions_user_idx").on(t.userId)],
+);
+
 export const activity = pgTable(
   "activity",
   {

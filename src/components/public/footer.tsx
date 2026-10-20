@@ -50,6 +50,11 @@ export function PublicFooter({ shop }: { shop?: ShopSettings }) {
               </Link>
             </li>
             <li>
+              <Link href="/contribution" className="underline-offset-4 hover:underline">
+                Contribution
+              </Link>
+            </li>
+            <li>
               <StaffLink className="underline-offset-4 hover:underline" />
             </li>
           </ul>
